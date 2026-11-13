@@ -15,11 +15,13 @@ func main() {
 	a.installMenus()
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:     "Govial",
-			Width:     1100,
-			Height:    720,
-			MinWidth:  720,
-			MinHeight: 480,
+			Title:  "Govial",
+			Width:  1100,
+			Height: 720,
+			// A tenkeyless board (18.25u x 6.5u) fits at 1u = 44 DIPs, with the
+			// assignment pane below it.
+			MinWidth:  840,
+			MinHeight: 640,
 			StateKey:  "main",
 			Content:   ui.View(a.view),
 		})
