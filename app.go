@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/glass"
@@ -418,7 +419,7 @@ func (a *app) board(c *ui.Context) {
 	}
 	box.ContextMenu(func(m *ui.Menu) {
 		if a.sel >= 0 && a.sel < len(keys) {
-			name := keyLabel(a.kb, keys[a.sel], a.layer)
+			name, _ := capLabels(a.kb, keys[a.sel], a.layer)
 			if name == "" {
 				name = "キー"
 			}
@@ -512,8 +513,8 @@ func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i i
 	ox := r.X + float32(key.RotX)*unit
 	oy := r.Y + float32(key.RotY)*unit
 	p.Transform(ui.Rotation(float32(key.Rot)), ox, oy, func() {
-		const gap = float32(3.5)
-		const lip = float32(4)
+		gap := unit * 0.065
+		lip := unit * 0.075
 		x := r.X + float32(key.X)*unit + gap
 		y := r.Y + float32(key.Y)*unit + gap
 		w := float32(key.W)*unit - gap*2
@@ -557,23 +558,29 @@ func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i i
 			faceH = h * 0.72
 		}
 		p.Fill(ui.Rect{X: x, Y: y, W: w, H: faceH}, face, radius)
-		label := keyLabel(a.kb, key, a.layer)
-		if label == "" {
-			return
+		main, sub := capLabels(a.kb, key, a.layer)
+		// Two sizes, so labels line up across the board; a label that still
+		// does not fit shrinks on its own as a last resort.
+		size := unit * 0.3
+		if utf8.RuneCountInString(main) > 3 {
+			size *= 0.78
 		}
-		size := t.FontSize
-		if size <= 0 {
-			size = 13
-		}
-		span := ui.Span{Text: label, Weight: 600, Size: size, Color: labelColor}
+		span := ui.Span{Text: main, Weight: 600, Size: size, Color: labelColor}
 		tw, th := p.MeasureText(0, span)
-		limit := w - 10
-		for size > 8 && tw > limit {
-			size--
-			span.Size = size
+		for span.Size > 7 && tw > w-unit*0.16 {
+			span.Size--
 			tw, th = p.MeasureText(0, span)
 		}
-		p.RichText(x+(w-tw)/2, y+(faceH-th)/2, 0, span)
+		mainH := faceH
+		if sub != "" {
+			mainH = faceH * 0.7
+			small := ui.Span{Text: sub, Weight: 500, Size: unit * 0.2, Color: t.TextMuted}
+			sw, sh := p.MeasureText(0, small)
+			p.RichText(x+(w-sw)/2, y+faceH-sh-unit*0.06, 0, small)
+		}
+		if main != "" {
+			p.RichText(x+(w-tw)/2, y+(mainH-th)/2, 0, span)
+		}
 	})
 }
 
@@ -585,10 +592,7 @@ func (a *app) holdText() string {
 	for _, pos := range a.hold {
 		if a.kb != nil {
 			if code, ok := a.kb.Code(0, pos.Row, pos.Col); ok {
-				name := a.kb.Label(code)
-				if name == "" {
-					name = "No"
-				}
+				name := buttonName(a.kb, code)
 				names = append(names, name)
 				continue
 			}
@@ -705,7 +709,7 @@ func (a *app) tapLabel(tap uint16) string {
 	if tap == 0 {
 		return "なし"
 	}
-	return a.buttonLabel(tap)
+	return buttonName(a.kb, tap)
 }
 
 func holdLabel(hold uint16) string {
@@ -787,7 +791,7 @@ func (a *app) assignTapHold(tap, hold uint16) {
 func (a *app) keySummary(c *ui.Context, key protocol.Key) {
 	t := c.Theme()
 	code, _ := keyCode(a.kb, key, a.layer)
-	name := a.kb.Label(code)
+	name, _ := capLabels(a.kb, key, a.layer)
 	if name == "" {
 		name = "No"
 	}
@@ -830,7 +834,7 @@ func choosable(key protocol.Key) bool {
 // key can join it.
 func (a *app) tapButton(c *ui.Context, code uint16) {
 	tap, hold := a.tapHold()
-	a.choiceButton(c, fmt.Sprintf("kc-%04x", code), a.buttonLabel(code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
+	a.choiceButton(c, fmt.Sprintf("kc-%04x", code), buttonName(a.kb, code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
 		a.assignTapHold(code, hold)
 	})
 }
@@ -920,15 +924,6 @@ func (a *app) picker(c *ui.Context) {
 			}
 		})
 	}
-}
-
-func (a *app) buttonLabel(code uint16) string {
-	if a.kb != nil && code >= 0x7E00 && code <= 0x7E3F {
-		if name := a.kb.Label(code); name != "" {
-			return name
-		}
-	}
-	return pickerLabel(code)
 }
 
 func layerPalette(kb *protocol.Keyboard) []keyGroup {
@@ -1029,37 +1024,45 @@ func palette() []keyGroup {
 	}
 }
 
-func pickerLabel(code uint16) string {
-	switch code {
-	case 0x0000:
-		return "No"
-	case 0x0028:
-		return "⏎"
-	case 0x002A:
-		return "⌫"
-	case 0x002C:
-		return "␣"
-	case 0x004C:
-		return "⌦"
-	case 0x004F:
-		return "→"
-	case 0x0050:
-		return "←"
-	case 0x0051:
-		return "↓"
-	case 0x0052:
-		return "↑"
-	case 0x00E0:
-		return "⌃"
-	case 0x00E1:
-		return "⇧"
-	case 0x00E2:
-		return "⌥"
-	case 0x00E3:
-		return "⌘"
-	default:
-		return protocol.KeyName(code)
+// capName is how a keycode reads on a keycap and in the choices: the
+// keyboard's own name for its custom keys, the Mac's symbol where a key has
+// one, and QMK's short name otherwise. KC_NO reads as nothing.
+func capName(kb *protocol.Keyboard, code uint16) string {
+	if sym, ok := capSymbols[code]; ok {
+		return sym
 	}
+	return kb.Label(code)
+}
+
+// buttonName is capName for a control, where KC_NO needs a name.
+func buttonName(kb *protocol.Keyboard, code uint16) string {
+	if name := capName(kb, code); name != "" {
+		return name
+	}
+	return "No"
+}
+
+var capSymbols = map[uint16]string{
+	0x0028: "⏎",
+	0x002A: "⌫",
+	0x0039: "⇪",
+	0x004A: "↖",
+	0x004B: "⇞",
+	0x004C: "⌦",
+	0x004D: "↘",
+	0x004E: "⇟",
+	0x004F: "→",
+	0x0050: "←",
+	0x0051: "↓",
+	0x0052: "↑",
+	0x00E0: "⌃",
+	0x00E1: "⇧",
+	0x00E2: "⌥",
+	0x00E3: "⌘",
+	0x00E4: "右⌃",
+	0x00E5: "右⇧",
+	0x00E6: "右⌥",
+	0x00E7: "右⌘",
 }
 
 func keyCode(kb *protocol.Keyboard, key protocol.Key, layer int) (uint16, bool) {
@@ -1072,32 +1075,43 @@ func keyCode(kb *protocol.Keyboard, key protocol.Key, layer int) (uint16, bool) 
 	return kb.Code(layer, key.Row, key.Col)
 }
 
-func keyLabel(kb *protocol.Keyboard, key protocol.Key, layer int) string {
+// capLabels is what a keycap shows: main, large, is the tap, and sub,
+// small under it, is the hold or a knob's turn.
+func capLabels(kb *protocol.Keyboard, key protocol.Key, layer int) (main, sub string) {
 	if key.Encoder {
-		code, ok := kb.EncoderCode(layer, key.EncoderIndex, key.EncDir)
-		name := "No"
-		if ok {
-			if label := kb.Label(code); label != "" {
-				name = label
-			}
-		}
-		turn := "↺"
+		code, _ := kb.EncoderCode(layer, key.EncoderIndex, key.EncDir)
 		if key.EncDir == 1 {
-			turn = "↻"
+			return capName(kb, code), "↻"
 		}
-		return turn + name
+		return capName(kb, code), "↺"
 	}
 	if !key.HasMatrix {
 		if len(key.Labels) > 0 {
-			return key.Labels[0]
+			return key.Labels[0], ""
 		}
-		return ""
+		return "", ""
 	}
 	code, ok := kb.Code(layer, key.Row, key.Col)
 	if !ok {
-		return ""
+		return "", ""
 	}
-	return kb.Label(code)
+	tap, hold := protocol.SplitTapHold(code)
+	switch {
+	case hold == 0:
+		return capName(kb, tap), ""
+	case tap == 0:
+		return shortHold(hold), "押す間"
+	default:
+		return capName(kb, tap), shortHold(hold)
+	}
+}
+
+// shortHold is holdLabel cut to fit under a keycap's tap.
+func shortHold(hold uint16) string {
+	if hold >= 0x5220 && hold <= 0x523F {
+		return fmt.Sprintf("L%d", hold-0x5220)
+	}
+	return holdLabel(hold)
 }
 
 func boardSize(keys []protocol.Key) (float32, float32) {
