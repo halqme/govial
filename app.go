@@ -783,7 +783,7 @@ func (a *app) holdPicker(c *ui.Context) {
 	if !open {
 		note = "長押しを付けられるのは、修飾のない基本キーだけです"
 	}
-	choices(c, note, groups, func(code uint16) {
+	choices(c, note, nil, groups, func(code uint16) {
 		a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), code == hold, code != 0 && !open, func() {
 			a.assignTapHold(tap, code)
 		})
@@ -791,12 +791,15 @@ func (a *app) holdPicker(c *ui.Context) {
 }
 
 // choices scrolls groups of choice buttons under their headings, after a
-// note when there is one.
-func choices(c *ui.Context, note string, groups []keyGroup, button func(code uint16)) {
+// note and lead when there are.
+func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button func(code uint16)) {
 	t := c.Theme()
-	ui.Scroll(c).Grow(1).Padding(t.Space(3), t.Space(4), t.Space(4), t.Space(4)).Gap(t.Space(2)).Children(func() {
+	ui.Scroll(c).Grow(1).Padding(t.Space(2), t.Space(4), t.Space(4), t.Space(4)).Gap(t.Space(2)).Children(func() {
 		if note != "" {
 			ui.Text(c, note).TextColor(t.TextMuted)
+		}
+		if lead != nil {
+			lead()
 		}
 		for _, group := range groups {
 			if group.name != "" {
@@ -865,14 +868,14 @@ func choosable(key protocol.Key) bool {
 
 // tapButton offers code for the tap. While the key has a hold, only a basic
 // key can join it.
-func (a *app) tapButton(c *ui.Context, code uint16) {
+func (a *app) tapButton(c *ui.Context, code uint16) ui.Element {
 	tap, hold := a.tapHold()
-	a.choiceButton(c, fmt.Sprintf("kc-%04x", code), buttonName(a.kb, code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
+	return a.choiceButton(c, fmt.Sprintf("kc-%04x", code), buttonName(a.kb, code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
 		a.assignTapHold(code, hold)
 	})
 }
 
-func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, pick func()) {
+func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, pick func()) ui.Element {
 	var b ui.Element
 	if chosen {
 		b = ui.PrimaryButton(c.Key(key), label)
@@ -880,7 +883,7 @@ func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, p
 		b = ui.Button(c.Key(key), label)
 	}
 	// Choices keep their width in a wrapping row and line up as keycaps.
-	b.Padding(c.Theme().Space(1), c.Theme().Space(2)).MinWidth(c.Theme().Rem(2.4)).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
+	return b.Padding(c.Theme().Space(1), c.Theme().Space(2)).MinWidth(c.Theme().Rem(2.4)).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
 }
 
 type keyGroup struct {
@@ -951,7 +954,59 @@ func (a *app) picker(c *ui.Context) {
 	case kinds[a.pick] == kindMacro:
 		note = "割り当てだけです。マクロの中身はまだ編集できません"
 	}
-	choices(c, note, groups, func(code uint16) { a.tapButton(c, code) })
+	var lead func()
+	if kinds[a.pick] == kindBasic {
+		lead = func() { a.basicBoard(c) }
+	}
+	choices(c, note, lead, groups, func(code uint16) { a.tapButton(c, code) })
+}
+
+// pickKey is one key of the basic board, w units wide; code room is space.
+type pickKey struct {
+	code uint16
+	w    float64
+}
+
+const room = 0xFFFF
+
+// basicRows is a tenkeyless ANSI board in the Mac's order, ⌃ ⌥ ⌘, so a
+// basic key is found where it sits on a keyboard. Print Screen, Scroll
+// Lock and Pause, which a Mac does not use, are in the palette instead.
+var basicRows = [][]pickKey{
+	{{0x29, 1}, {room, 1}, {0x3A, 1}, {0x3B, 1}, {0x3C, 1}, {0x3D, 1}, {room, 0.5}, {0x3E, 1}, {0x3F, 1}, {0x40, 1}, {0x41, 1}, {room, 0.5}, {0x42, 1}, {0x43, 1}, {0x44, 1}, {0x45, 1}},
+	{{0x35, 1}, {0x1E, 1}, {0x1F, 1}, {0x20, 1}, {0x21, 1}, {0x22, 1}, {0x23, 1}, {0x24, 1}, {0x25, 1}, {0x26, 1}, {0x27, 1}, {0x2D, 1}, {0x2E, 1}, {0x2A, 2}, {room, 0.25}, {0x49, 1}, {0x4A, 1}, {0x4B, 1}},
+	{{0x2B, 1.5}, {0x14, 1}, {0x1A, 1}, {0x08, 1}, {0x15, 1}, {0x17, 1}, {0x1C, 1}, {0x18, 1}, {0x0C, 1}, {0x12, 1}, {0x13, 1}, {0x2F, 1}, {0x30, 1}, {0x31, 1.5}, {room, 0.25}, {0x4C, 1}, {0x4D, 1}, {0x4E, 1}},
+	{{0x39, 1.75}, {0x04, 1}, {0x16, 1}, {0x07, 1}, {0x09, 1}, {0x0A, 1}, {0x0B, 1}, {0x0D, 1}, {0x0E, 1}, {0x0F, 1}, {0x33, 1}, {0x34, 1}, {0x28, 2.25}},
+	{{0xE1, 2.25}, {0x1D, 1}, {0x1B, 1}, {0x06, 1}, {0x19, 1}, {0x05, 1}, {0x11, 1}, {0x10, 1}, {0x36, 1}, {0x37, 1}, {0x38, 1}, {0xE5, 2.75}, {room, 1.25}, {0x52, 1}},
+	{{0xE0, 1.25}, {0xE2, 1.25}, {0xE3, 1.25}, {0x2C, 6.25}, {0xE7, 1.25}, {0xE6, 1.25}, {0x65, 1.25}, {0xE4, 1.25}, {room, 0.25}, {0x50, 1}, {0x51, 1}, {0x4F, 1}},
+}
+
+func (a *app) basicBoard(c *ui.Context) {
+	t := c.Theme()
+	// Six rows fit the panel under the kind switch.
+	unit := t.Rem(1.65)
+	spacing := t.Space(1) / 2
+	ui.Column(c).Gap(spacing).Role(ui.RoleGroup).Label("基本のキー").Children(func() {
+		for _, row := range basicRows {
+			ui.Row(c).Gap(spacing).Children(func() {
+				for _, key := range row {
+					width := float32(key.w)*unit - spacing
+					if key.code == room {
+						ui.Box(c).Width(width).Shrink(0)
+						continue
+					}
+					b := a.tapButton(c, key.code).Width(width).MinWidth(width).Height(unit).Padding(0)
+					// A symbol reads at full size, a word smaller, as on keycaps.
+					switch n := utf8.RuneCountInString(buttonName(a.kb, key.code)); {
+					case n > 3:
+						b.FontSize(t.Rem(0.6))
+					case n > 1:
+						b.FontSize(t.Rem(0.7))
+					}
+				}
+			})
+		}
+	})
 }
 
 func layerPalette(kb *protocol.Keyboard) []keyGroup {
@@ -1034,21 +1089,14 @@ func customPalette(kb *protocol.Keyboard) []keyGroup {
 	return []keyGroup{{name: "独自", codes: codes}}
 }
 
+// palette is the basic keys the board above it does not hold.
 func palette() []keyGroup {
-	letters := make([]uint16, 26)
-	for i := range letters {
-		letters[i] = uint16(0x04 + i)
-	}
-	digits := make([]uint16, 10)
-	for i := range digits {
-		digits[i] = uint16(0x1E + i)
-	}
 	return []keyGroup{
-		{name: "基本", codes: []uint16{0x0001, 0x0000, 0x0029, 0x002B, 0x002C, 0x0028, 0x002A, 0x004C}},
-		{name: "矢印", codes: []uint16{0x0050, 0x0051, 0x0052, 0x004F}},
-		{name: "修飾", codes: []uint16{0x00E0, 0x00E1, 0x00E2, 0x00E3}},
-		{name: "文字", codes: letters},
-		{name: "数字", codes: digits},
+		{name: "なし・透過", codes: []uint16{0x0000, 0x0001}},
+		{name: "日本語", codes: []uint16{0x0091, 0x0090, 0x0089, 0x0087, 0x008B, 0x008A}},
+		{name: "メディア", codes: []uint16{0x00A8, 0x00AA, 0x00A9, 0x00AC, 0x00AE, 0x00AB, 0x00BE, 0x00BD}},
+		{name: "マウス", codes: []uint16{0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D9, 0x00DA, 0x00DB, 0x00DC}},
+		{name: "その他", codes: []uint16{0x0046, 0x0047, 0x0048}},
 	}
 }
 
@@ -1091,6 +1139,12 @@ var capSymbols = map[uint16]string{
 	0x00E5: "右⇧",
 	0x00E6: "右⌥",
 	0x00E7: "右⌘",
+	0x0087: "ろ",
+	0x0089: "¥",
+	0x008A: "変換",
+	0x008B: "無変換",
+	0x0090: "かな",
+	0x0091: "英数",
 }
 
 func keyCode(kb *protocol.Keyboard, key protocol.Key, layer int) (uint16, bool) {

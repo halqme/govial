@@ -277,3 +277,19 @@ func TestDeviceNameWinsOverDefinition(t *testing.T) {
 		t.Fatalf("blank device name gave %q", got)
 	}
 }
+
+func TestBasicKeysSitOnABoard(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Layers: 1, Keys: []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}}}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleGroup, "基本のキー"); !ok {
+		t.Fatal("basic keys are not laid out as a board")
+	}
+	for _, label := range []string{"Esc", "F12", "A", "⌘", "右⌘", "Space", "→", "英数", "かな", "PScr", "MB1"} {
+		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
+			t.Fatalf("%s missing", label)
+		}
+	}
+}
