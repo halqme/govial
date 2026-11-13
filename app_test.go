@@ -293,3 +293,15 @@ func TestBasicKeysSitOnABoard(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadingDoesNotSayMissing(t *testing.T) {
+	a := newApp()
+	a.busy = true
+	tt := ui.NewTester(a.view, 900, 640)
+	if tt.HasText("Vial のキーボードが見つかりません") {
+		t.Fatal("reading the keyboard says there is none")
+	}
+	if !tt.HasText("キーボードを読み込んでいます") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+}

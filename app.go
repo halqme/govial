@@ -87,6 +87,8 @@ func (a *app) view(c *ui.Context) {
 		switch {
 		case a.kb == nil && a.unlocking:
 			a.unlockPane(c)
+		case a.kb == nil && a.busy:
+			a.searching(c)
 		case a.kb == nil:
 			a.empty(c)
 		default:
@@ -194,7 +196,8 @@ func (a *app) toolbar(c *ui.Context) {
 		ui.Spacer(c)
 		a.layers(c)
 		ui.Spacer(c)
-		if a.busy {
+		// With no board, searching shows the wait in the middle instead.
+		if a.busy && a.kb != nil {
 			ui.Spinner(c).Label("通信中")
 		}
 		if a.dev != nil {
@@ -287,6 +290,16 @@ func (a *app) empty(c *ui.Context) {
 		icon.Role(ui.RoleNone)
 		ui.Text(c, "Vial のキーボードが見つかりません")
 		ui.PrimaryButton(c, "更新").Disabled(a.busy).OnClick(a.refresh)
+	})
+}
+
+// searching stands in for the board while the keyboard is looked for and
+// read, so a slow first read does not say there is no keyboard.
+func (a *app) searching(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Children(func() {
+		ui.Spinner(c).Label("キーボードを読み込んでいます")
+		ui.Text(c, "キーボードを読み込んでいます").TextColor(t.TextMuted)
 	})
 }
 
