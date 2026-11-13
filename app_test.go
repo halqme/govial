@@ -1,0 +1,121 @@
+package main
+
+import (
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/halqme/govial/protocol"
+)
+
+func TestEmptyStateOffersRefresh(t *testing.T) {
+	a := newApp()
+	tt := ui.NewTester(a.view, 900, 640)
+	if !tt.HasText("Vial のキーボードが見つかりません") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "更新"); !ok {
+		t.Fatal("refresh button missing")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleToolbar, "操作"); !ok {
+		t.Fatal("toolbar missing")
+	}
+}
+
+func TestConnectionErrorStaysOnScreen(t *testing.T) {
+	a := newApp()
+	a.err = "接続できません"
+	tt := ui.NewTester(a.view, 900, 640)
+	if _, ok := tt.AccessByRole(ui.RoleAlert, "接続できません"); !ok {
+		t.Fatal("error is not an alert")
+	}
+}
+
+func TestLayerSwitchAndArrowSelection(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Name:   "Board",
+		Layers: 2,
+		Keys: []protocol.Key{
+			{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true, Row: 0, Col: 0},
+			{X: 2, Y: 0, W: 1, H: 1, HasMatrix: true, Row: 0, Col: 1},
+		},
+	}
+	tt := ui.NewTester(a.view, 1000, 700)
+	if err := tt.Click("1"); err != nil {
+		t.Fatal(err)
+	}
+	if a.layer != 1 {
+		t.Fatalf("layer %d", a.layer)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleSplitter, "Divider"); !ok {
+		t.Fatal("board and palette are not a split")
+	}
+	board, ok := tt.AccessByRole(ui.RoleGroup, "キー配列")
+	if !ok {
+		t.Fatalf("board missing: %+v", tt.AccessAll())
+	}
+	tt.ClickAt(board.Bounds.X+2, board.Bounds.Y+2)
+	tt.Key(0, ui.KeyRight)
+	if a.sel != 0 {
+		t.Fatalf("first arrow selected %d", a.sel)
+	}
+	tt.Key(0, ui.KeyRight)
+	if a.sel != 1 {
+		t.Fatalf("second arrow selected %d", a.sel)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); !ok {
+		t.Fatal("keycode palette missing A")
+	}
+}
+
+func TestKnobAssignmentIsNotMatrix(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Layers: 1,
+		Keys: []protocol.Key{
+			{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true, Row: 0, Col: 1},
+			{X: 8, Y: 1, W: 1, H: 1, Encoder: true, EncoderIndex: 0, EncDir: 1},
+		},
+	}
+	a.sel = 1
+	tt := ui.NewTester(a.view, 1000, 700)
+	if tt.HasText("このキーはマトリクスにありません") {
+		t.Fatal("knob is treated as a key with no assignment")
+	}
+	if !tt.HasText("ノブ 1 · 時計回り · 0000") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+}
+
+func TestLockedKeyboardHidesPalette(t *testing.T) {
+	a := newApp()
+	a.kb = &protocol.Keyboard{
+		Layers: 1,
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if !tt.HasText("ロック中です。割り当てるには「解除」を押して、表示されたキーを押し続けてください") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); ok {
+		t.Fatal("palette is available while locked")
+	}
+}
+
+func TestLockCommandWithoutKeyboard(t *testing.T) {
+	a := newApp()
+	a.installMenus()
+	a.syncMenu()
+	if a.lockItem.IsEnabled() {
+		t.Fatal("lock command enabled with no keyboard")
+	}
+	if a.lockLabel != "解除" {
+		t.Fatalf("lock label %q", a.lockLabel)
+	}
+	if !a.reloadItem.IsEnabled() {
+		t.Fatal("reload command disabled while idle")
+	}
+}

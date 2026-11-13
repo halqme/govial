@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "skills": {
+    "macos-design-guidelines": {
+      "source": "ehmo/platform-design-skills",
+      "sourceType": "github",
+      "skillPath": "skills/macos/SKILL.md",
+      "computedHash": "d5ad3e4541b2810e3ce01c85ed442bcb9458d585c46293b273fd03d616c91abc"
+    },
+    "mygo-components": {
+      "source": "transmit-bug/mygo-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mygo-components/SKILL.md",
+      "computedHash": "88f25db702615bc45e25b369686baaece503a0718e41c45757c0544f99a3b109"
+    },
+    "mygo-desktop": {
+      "source": "transmit-bug/mygo-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mygo-desktop/SKILL.md",
+      "computedHash": "41259c01fdcf848ce20f4b94d00273818c7b90a982bf91e2f16a74546a7ec634"
+    }
+  }
+}
