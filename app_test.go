@@ -50,8 +50,8 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	if a.layer != 1 {
 		t.Fatalf("layer %d", a.layer)
 	}
-	if _, ok := tt.AccessByRole(ui.RoleSplitter, "Divider"); !ok {
-		t.Fatal("board and palette are not a split")
+	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); ok {
+		t.Fatal("panel shows with no key chosen")
 	}
 	board, ok := tt.AccessByRole(ui.RoleGroup, "キー配列")
 	if !ok {
@@ -68,6 +68,16 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); !ok {
 		t.Fatal("keycode palette missing A")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); !ok {
+		t.Fatal("panel missing for the chosen key")
+	}
+	tt.Key(0, ui.KeyEscape)
+	if a.sel != -1 {
+		t.Fatalf("escape left %d chosen", a.sel)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); ok {
+		t.Fatal("panel stays after escape")
 	}
 }
 

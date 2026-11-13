@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/plugins/sfsymbols"
 	"github.com/egoist/mygo/ui"
 	"github.com/halqme/govial/hid"
@@ -21,6 +22,12 @@ const keyUnit = 54.0
 
 // keyboardIcon is shown where the system has no SF Symbol.
 var keyboardIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M6 10h2v2H6zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2zM7 14h10v2H7z"/></svg>`))
+
+var (
+	lockIcon   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3h1v11H6V10zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>`))
+	unlockIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M9 10V7a3 3 0 0 1 6 0h2a5 5 0 0 0-10 0v3H6v11h12V10z"/></svg>`))
+	reloadIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 5V2l4 4-4 4V7a5 5 0 1 0 5 5h2a7 7 0 1 1-7-7z"/></svg>`))
+)
 
 type app struct {
 	win         *mygo.Window
@@ -41,7 +48,6 @@ type app struct {
 	unlocking   bool
 	remain      int
 	hold        []protocol.KeyPos
-	boardShare  float32
 	// unit and inset are the keycap scale and offset of the last drawn
 	// board, so pointer hits match what is on screen.
 	unit       float32
@@ -58,7 +64,7 @@ type app struct {
 }
 
 func newApp() *app {
-	return &app{sel: -1, hot: -1, boardShare: 64, slot: slotTap}
+	return &app{sel: -1, hot: -1, slot: slotTap}
 }
 
 func (a *app) view(c *ui.Context) {
@@ -71,9 +77,11 @@ func (a *app) view(c *ui.Context) {
 	}
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		a.toolbar(c)
-		// MyGo v0.9.0 has no banner. This text stays while the failure does.
+		// MyGo v0.9.0 has no banner. This notice stays while the failure does.
 		if a.err != "" {
-			ui.Text(c, a.err).Role(ui.RoleAlert).TextColor(t.Danger).Margin(t.Space(2), t.Space(4), 0, t.Space(4))
+			ui.Row(c).Margin(0, t.Space(4), t.Space(2), t.Space(4)).Padding(t.Space(2), t.Space(3)).Radius(t.Radius).Background(t.Danger.Mix(t.Background, 0.85)).Children(func() {
+				ui.Text(c, a.err).Role(ui.RoleAlert).TextColor(t.Danger)
+			})
 		}
 		switch {
 		case a.kb == nil && a.unlocking:
@@ -175,32 +183,48 @@ func (a *app) toggleLock() {
 	}
 }
 
+// toolbar is the window's title bar: the window controls, the keyboard,
+// its layers in the middle, and the lock and reload at the end.
 func (a *app) toolbar(c *ui.Context) {
+	t := c.Theme()
+	bar := c.TitleBar()
 	ui.Toolbar(c, func() {
+		a.deviceSelect(c)
+		ui.Spacer(c)
+		a.layers(c)
+		ui.Spacer(c)
 		if a.busy {
 			ui.Spinner(c).Label("通信中")
 		}
-		ui.Button(c.Key("refresh"), "更新").Disabled(a.busy).OnClick(a.refresh)
 		if a.dev != nil {
 			a.lockButton(c)
 		}
-		ui.Spacer(c)
-		a.deviceSelect(c)
-	}).Label("操作")
+		iconButton(c, "reload", "arrow.clockwise", reloadIcon, "再読み込み").Disabled(a.busy).OnClick(a.refresh)
+	}).Label("操作").Height(max(bar.Height, t.Rem(3.25))).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow()
 }
 
 func (a *app) lockButton(c *ui.Context) {
-	var b ui.Element
-	if !a.unlocked && !a.unlocking {
-		b = ui.PrimaryButton(c.Key("lock"), a.lockCommand())
-	} else {
-		b = ui.Button(c.Key("lock"), a.lockCommand())
+	symbol, icon, tip := "lock.fill", lockIcon, "ロック中。押すと解除します"
+	if a.unlocked || a.unlocking {
+		symbol, icon, tip = "lock.open.fill", unlockIcon, "解除中。押すとロックします"
 	}
-	b.Disabled(a.busy).OnClick(a.toggleLock)
+	iconButton(c, "lock", symbol, icon, a.lockCommand()).Tooltip(tip).Disabled(a.busy).OnClick(a.toggleLock)
+}
+
+// iconButton is a title bar button that shows an SF Symbol, or fallback
+// where the system has none, named by label.
+func iconButton(c *ui.Context, key, symbol string, fallback *ui.SVG, label string) ui.Element {
+	t := c.Theme()
+	return ui.Button(c.Key(key), "").Children(func() {
+		sfsymbols.Symbol(c, symbol).Size(t.Rem(1.05)).Color(t.Text).Fallback(fallback).Role(ui.RoleNone)
+	}).Label(label).Tooltip(label)
 }
 
 func (a *app) deviceSelect(c *ui.Context) {
 	if len(a.infos) < 2 {
+		if a.kb != nil && a.kb.Name != "" {
+			ui.Text(c, a.kb.Name).Bold().Tooltip(a.kb.UIDString())
+		}
 		return
 	}
 	names := deviceNames(a.infos)
@@ -289,18 +313,13 @@ func (a *app) layers(c *ui.Context) {
 	ui.Segmented(c, &a.layer, labels...).Label("レイヤー")
 }
 
+// workspace is the board over the whole window, with the panel for the
+// chosen key floating under it. The board fits the room the panel leaves.
 func (a *app) workspace(c *ui.Context) {
-	ui.SplitVerticalPercent(c, &a.boardShare, func() { a.boardPane(c) }, func() { a.inspector(c) }).Grow(1).SplitReset(64)
-}
-
-func (a *app) boardPane(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(t.Space(3), t.Space(4), t.Space(2), t.Space(4)).Justify(ui.Center).Children(func() {
-			a.layers(c)
-		})
+	ui.Column(c).Grow(1).Children(func() {
 		a.layoutOptions(c)
 		a.board(c)
+		a.panel(c)
 	})
 }
 
@@ -366,7 +385,7 @@ func (a *app) board(c *ui.Context) {
 	const pad = float32(18)
 	// Painted, not a grid of buttons: keycaps rotate and overlap,
 	// which no collection widget lays out. MyGo v0.9.0.
-	box := ui.Box(c).Grow(1).Focusable().Label("キー配列")
+	box := ui.Box(c).Grow(1).Focusable().Role(ui.RoleGroup).Label("キー配列")
 	switch {
 	case box.Shortcut(0, ui.KeyLeft):
 		a.moveSelection(-1, 0)
@@ -376,6 +395,8 @@ func (a *app) board(c *ui.Context) {
 		a.moveSelection(0, -1)
 	case box.Shortcut(0, ui.KeyDown):
 		a.moveSelection(0, 1)
+	case box.Shortcut(0, ui.KeyEscape):
+		a.sel = -1
 	}
 	a.hot = -1
 	if px, py, ok := box.PointerPosition(); ok && a.unit > 0 {
@@ -389,8 +410,11 @@ func (a *app) board(c *ui.Context) {
 			}
 		}
 	}
-	if a.hot >= 0 && (box.Clicked() || box.RightClicked()) {
+	switch {
+	case a.hot >= 0 && (box.Clicked() || box.RightClicked()):
 		a.sel = a.hot
+	case box.Clicked():
+		a.sel = -1
 	}
 	box.ContextMenu(func(m *ui.Menu) {
 		if a.sel >= 0 && a.sel < len(keys) {
@@ -586,62 +610,56 @@ func (a *app) holding(key protocol.Key) bool {
 	return false
 }
 
-func (a *app) inspector(c *ui.Context) {
-	t := c.Theme()
-	if key, ok := a.editable(); ok {
-		a.assignPane(c, key)
+// panel is the floating pane for the chosen key: its slots and their
+// choices, or why it cannot be assigned yet. It shows while unlocking too.
+func (a *app) panel(c *ui.Context) {
+	chosen := a.kb != nil && a.sel >= 0 && a.sel < len(a.kb.Keys)
+	if !chosen && !a.unlocking {
 		return
 	}
-	ui.Scroll(c).Fill().Background(t.Surface).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+	t := c.Theme()
+	panel := ui.Row(c.Key("panel"))
+	if _, ok := a.editable(); ok {
+		// Fixed while editing, so switching slots does not move the board.
+		panel.Height(t.Rem(15))
+	}
+	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
 		if a.unlocking {
-			ui.Text(c, "解除").TextColor(t.TextMuted)
-			a.unlockStatus(c)
-			return
-		}
-		if a.sel < 0 || a.sel >= len(a.kb.Keys) {
-			ui.Text(c, "キーを選ぶと割り当てが出ます").TextColor(t.TextMuted)
-			a.lockNote(c)
-			a.inspectorFoot(c)
+			ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Padding(t.Space(4)).Children(func() {
+				a.unlockStatus(c)
+			})
 			return
 		}
 		key := a.kb.Keys[a.sel]
-		if !key.HasMatrix && !key.Encoder {
-			ui.Text(c, "このキーはマトリクスにありません").TextColor(t.TextMuted)
-			a.inspectorFoot(c)
-			return
-		}
-		a.keySummary(c, key)
-		a.lockNote(c)
-		a.inspectorFoot(c)
+		ui.Column(c).Width(t.Rem(13)).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+			a.keySummary(c, key)
+			if key.HasMatrix || key.Encoder {
+				a.slots(c, key)
+			}
+		})
+		ui.Scroll(c).Grow(1).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+			switch {
+			case !key.HasMatrix && !key.Encoder:
+				ui.Text(c, "このキーはマトリクスにありません").TextColor(t.TextMuted)
+			case !a.unlocked:
+				a.lockNote(c)
+				ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock).AlignSelf(ui.Start)
+			case a.slotOf(key) == slotHold:
+				a.holdPicker(c)
+			default:
+				a.picker(c)
+			}
+		})
 	})
 }
 
-// editable is the selected key when it can be assigned now.
+// editable is the chosen key when it can be assigned now.
 func (a *app) editable() (protocol.Key, bool) {
 	if a.kb == nil || a.unlocking || !a.unlocked || a.sel < 0 || a.sel >= len(a.kb.Keys) {
 		return protocol.Key{}, false
 	}
 	key := a.kb.Keys[a.sel]
 	return key, key.HasMatrix || key.Encoder
-}
-
-// assignPane keeps the key and its slots in place while the choices for
-// the chosen slot scroll beside them.
-func (a *app) assignPane(c *ui.Context, key protocol.Key) {
-	t := c.Theme()
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Surface).Children(func() {
-		ui.Column(c).Width(t.Rem(13)).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
-			a.keySummary(c, key)
-			a.slots(c, key)
-		})
-		ui.Scroll(c).Grow(1).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
-			if a.slotOf(key) == slotHold {
-				a.holdPicker(c)
-			} else {
-				a.picker(c)
-			}
-		})
-	})
 }
 
 // The slots are what a key does on a tap and on a hold. A key with both is
@@ -660,7 +678,7 @@ func (a *app) slotOf(key protocol.Key) string {
 }
 
 func (a *app) slots(c *ui.Context, key protocol.Key) {
-	if key.Encoder {
+	if key.Encoder || !a.unlocked {
 		return
 	}
 	tap, hold := a.tapHold()
@@ -671,7 +689,7 @@ func (a *app) slots(c *ui.Context, key protocol.Key) {
 		ui.SidebarItem(c, slotHold, nil, "長押し").Children(func() {
 			ui.Badge(c, holdLabel(hold))
 		})
-	}).Label("動作")
+	}).Label("動作").Background(ui.RGBA(0, 0, 0, 0))
 }
 
 // tapHold is the selected key's code read as a tap and a hold.
@@ -773,17 +791,16 @@ func (a *app) keySummary(c *ui.Context, key protocol.Key) {
 	if name == "" {
 		name = "No"
 	}
-	ui.Text(c, fmt.Sprintf("レイヤー %d", a.layer)).TextColor(t.TextMuted)
 	ui.Text(c, name).FontSize(t.Rem(1.6)).Bold()
 	if key.Encoder {
 		turn := "反時計回り"
 		if key.EncDir == 1 {
 			turn = "時計回り"
 		}
-		ui.Text(c, fmt.Sprintf("ノブ %d · %s · %04X", key.EncoderIndex+1, turn, code)).TextColor(t.TextMuted)
+		ui.Text(c, fmt.Sprintf("ノブ %d · %s · %04X", key.EncoderIndex+1, turn, code)).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
 		return
 	}
-	ui.Text(c, fmt.Sprintf("%d,%d · %04X", key.Row, key.Col, code)).TextColor(t.TextMuted)
+	ui.Text(c, fmt.Sprintf("レイヤー %d · %d,%d · %04X", a.layer, key.Row, key.Col, code)).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
 }
 
 func (a *app) lockNote(c *ui.Context) {
@@ -791,13 +808,6 @@ func (a *app) lockNote(c *ui.Context) {
 		return
 	}
 	ui.Text(c, "ロック中です。割り当てるには「解除」を押して、表示されたキーを押し続けてください").TextColor(c.Theme().TextMuted)
-}
-
-func (a *app) inspectorFoot(c *ui.Context) {
-	if a.kb == nil {
-		return
-	}
-	ui.Text(c, a.kb.UIDString()).FontSize(c.Theme().Rem(0.85)).TextColor(c.Theme().TextMuted)
 }
 
 func (a *app) current() uint16 {
