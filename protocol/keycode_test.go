@@ -101,3 +101,42 @@ func TestCustomKeyLabel(t *testing.T) {
 		t.Fatalf("unset custom: %q", got)
 	}
 }
+
+func TestTapHold(t *testing.T) {
+	mo1, _ := MomentaryLayer(1)
+	mo16, _ := MomentaryLayer(16)
+	cases := []struct {
+		code      uint16
+		tap, hold uint16
+	}{
+		{0x0004, 0x0004, 0},             // A
+		{0x0104, 0x0104, 0},             // LCTL(KC_A) is a tap
+		{0x422C, 0x002C, mo1 + 1},       // LT(2, KC_SPACE)
+		{0x2129, 0x0029, ModHold(1)},    // LCTL_T(KC_ESCAPE)
+		{0x3204, 0x0004, ModHold(0x12)}, // RSFT_T(KC_A)
+		{mo1, 0, mo1},
+		{0x2800, 0, ModHold(8)}, // LGUI_T(KC_NO)
+		{0x7701, 0x7701, 0},     // M1
+	}
+	for _, tc := range cases {
+		tap, hold := SplitTapHold(tc.code)
+		if tap != tc.tap || hold != tc.hold {
+			t.Errorf("split %04X: got %04X %04X, want %04X %04X", tc.code, tap, hold, tc.tap, tc.hold)
+			continue
+		}
+		if got, ok := JoinTapHold(tap, hold); !ok || got != tc.code {
+			t.Errorf("join %04X %04X: got %04X %v, want %04X", tap, hold, got, ok, tc.code)
+		}
+	}
+	refused := []struct{ tap, hold uint16 }{
+		{0x0104, mo1},        // a modified tap has no LT form
+		{0x7701, ModHold(1)}, // nor a macro
+		{0x0004, mo16},       // LT reaches layer 15
+		{0x0004, 0x0004},     // a key is not a hold
+	}
+	for _, tc := range refused {
+		if got, ok := JoinTapHold(tc.tap, tc.hold); ok {
+			t.Errorf("join %04X %04X: got %04X, want none", tc.tap, tc.hold, got)
+		}
+	}
+}

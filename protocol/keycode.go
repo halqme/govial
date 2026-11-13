@@ -100,6 +100,53 @@ func LayerTap(layer int, tap uint16) (uint16, bool) {
 	return 0x4000 | uint16(layer)<<8 | tap, true
 }
 
+// SplitTapHold reads code as what a tap sends and what a hold does. The
+// hold is 0 for nothing, MO(layer) for a layer, or a modifier set shifted
+// left 8 bits, as in ModHold. LT and mod-tap keys split into both; MO(layer)
+// is a hold with no tap; every other code is a tap with no hold.
+func SplitTapHold(code uint16) (tap, hold uint16) {
+	switch {
+	case code >= 0x2000 && code <= 0x3FFF:
+		return code & 0xFF, ModHold(byte(code>>8) & 0x1F)
+	case code >= 0x4000 && code <= 0x4FFF:
+		hold, _ := MomentaryLayer(int(code>>8) & 0xF)
+		return code & 0xFF, hold
+	case code >= 0x5220 && code <= 0x523F:
+		return 0, code
+	default:
+		return code, 0
+	}
+}
+
+// JoinTapHold is the one keycode that sends tap and does hold, as
+// SplitTapHold reads them. It is false when no single keycode carries the
+// pair: a hold needs a basic tap, and a layer hold a layer below 16.
+func JoinTapHold(tap, hold uint16) (uint16, bool) {
+	if hold == 0 {
+		return tap, true
+	}
+	isMods := hold&0xE0FF == 0 && hold != 0
+	isLayer := hold >= 0x5220 && hold <= 0x523F
+	switch {
+	case !isMods && !isLayer:
+		return 0, false
+	case tap == 0 && isLayer:
+		return hold, true
+	case tap > 0xFF:
+		return 0, false
+	case isMods:
+		return 0x2000 | hold | tap, true
+	default:
+		return LayerTap(int(hold-0x5220), tap)
+	}
+}
+
+// ModHold is the hold for a modifier set: bits 0 to 3 are Ctrl, Shift, Alt
+// and GUI, and bit 4 makes them the right-hand ones.
+func ModHold(mods byte) uint16 {
+	return uint16(mods&0x1F) << 8
+}
+
 // MacroKey is macro slot index, 0 through 127.
 func MacroKey(index int) (uint16, bool) {
 	if index < 0 || index > 127 {
