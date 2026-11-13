@@ -1209,6 +1209,9 @@ func (a *app) lock() {
 	dev := a.dev
 	go func() {
 		err := protocol.LockKeyboard(dev)
+		// The keyboard can lock and still drop the reply. The status
+		// read is what refresh uses, so a locked status wins.
+		status, statusErr := protocol.Security(dev)
 		if a.win == nil {
 			return
 		}
@@ -1217,14 +1220,40 @@ func (a *app) lock() {
 				return
 			}
 			a.busy = false
-			if err != nil {
-				a.err = explain(err)
-				return
-			}
-			a.unlocked = false
-			a.flash = "ロックしました"
+			a.finishLock(err, status, statusErr)
 		})
 	}()
+}
+
+// finishLock applies a lock attempt. A locked status wins even when the
+// lock command itself reported an error.
+func (a *app) finishLock(cmdErr error, status protocol.Unlock, statusErr error) {
+	if statusErr == nil {
+		a.unlocked = status.Open
+		a.unlocking = status.Pending
+		if len(status.Keys) > 0 {
+			a.hold = status.Keys
+		}
+		if !status.Open && !status.Pending {
+			a.err = ""
+			a.flash = "ロックしました"
+			return
+		}
+		if cmdErr != nil {
+			a.err = explain(cmdErr)
+			return
+		}
+		a.err = "ロックできませんでした"
+		return
+	}
+	if cmdErr != nil {
+		a.err = explain(cmdErr)
+		return
+	}
+	a.unlocked = false
+	a.unlocking = false
+	a.err = ""
+	a.flash = "ロックしました"
 }
 
 func (a *app) schedulePoll(gen int) {

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/halqme/govial/hid"
 	"github.com/halqme/govial/protocol"
 )
 
@@ -168,6 +170,41 @@ func TestHoldLayerUsesTheCurrentBasicKey(t *testing.T) {
 		if group.name == "ホールド" {
 			t.Fatal("a modified key cannot be the tap side")
 		}
+	}
+}
+
+func TestLockButtonStartsLock(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.dev = &hid.Device{}
+	a.kb = &protocol.Keyboard{Layers: 1, Keys: []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}}}
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "ロック"); !ok {
+		t.Fatalf("lock button missing: %q", tt.Texts())
+	}
+	if err := tt.Click("ロック"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.busy {
+		t.Fatal("lock button did not start locking")
+	}
+}
+
+func TestLockFollowsKeyboardWhenReplyIsMissed(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.finishLock(errors.New("keyboard did not answer"), protocol.Unlock{}, nil)
+	if a.unlocked || a.unlocking || a.err != "" || a.flash != "ロックしました" {
+		t.Fatalf("unlocked=%v unlocking=%v err=%q flash=%q", a.unlocked, a.unlocking, a.err, a.flash)
+	}
+}
+
+func TestLockStaysOpenWhenKeyboardRefuses(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.finishLock(nil, protocol.Unlock{Open: true}, nil)
+	if !a.unlocked || a.flash != "" || a.err != "ロックできませんでした" {
+		t.Fatalf("unlocked=%v flash=%q err=%q", a.unlocked, a.flash, a.err)
 	}
 }
 
