@@ -287,9 +287,20 @@ func TestBasicKeysSitOnABoard(t *testing.T) {
 	if _, ok := tt.AccessByRole(ui.RoleGroup, "基本のキー"); !ok {
 		t.Fatal("basic keys are not laid out as a board")
 	}
-	for _, label := range []string{"Esc", "F12", "A", "⌘", "右⌘", "Space", "→", "英数", "かな", "PScr", "MB1"} {
+	for _, label := range []string{"Esc", "F12", "A", "⌘", "右⌘", "Space", "→"} {
 		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
 			t.Fatalf("%s missing", label)
+		}
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "英数"); ok {
+		t.Fatal("keys off the board share its pane")
+	}
+	if err := tt.Click("その他"); err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{"No", "▽", "英数", "かな", "Mute", "MB1", "PScr"} {
+		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
+			t.Fatalf("%s missing from その他", label)
 		}
 	}
 }

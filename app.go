@@ -655,7 +655,7 @@ func (a *app) panel(c *ui.Context) {
 	panel := ui.Row(c.Key("panel"))
 	if _, ok := a.editable(); ok {
 		// Fixed while editing, so switching slots does not move the board.
-		panel.Height(t.Rem(15))
+		panel.Height(t.Rem(17))
 	}
 	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
 		if a.unlocking {
@@ -789,15 +789,15 @@ func (a *app) holdPicker(c *ui.Context) {
 	}
 	groups := []keyGroup{
 		{codes: []uint16{0}},
-		{name: "押している間のレイヤー", codes: layerHolds},
+		{name: "レイヤー", codes: layerHolds, short: layerNumber},
 		{name: "修飾", codes: modHolds},
 	}
 	var note string
 	if !open {
 		note = "長押しを付けられるのは、修飾のない基本キーだけです"
 	}
-	choices(c, note, nil, groups, func(code uint16) {
-		a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), code == hold, code != 0 && !open, func() {
+	choices(c, note, nil, groups, func(code uint16, short string) {
+		a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), short, code == hold, code != 0 && !open, func() {
 			a.assignTapHold(tap, code)
 		})
 	})
@@ -805,7 +805,7 @@ func (a *app) holdPicker(c *ui.Context) {
 
 // choices scrolls groups of choice buttons under their headings, after a
 // note and lead when there are.
-func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button func(code uint16)) {
+func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button func(code uint16, short string)) {
 	t := c.Theme()
 	ui.Scroll(c).Grow(1).Padding(t.Space(2), t.Space(4), t.Space(4), t.Space(4)).Gap(t.Space(2)).Children(func() {
 		if note != "" {
@@ -814,14 +814,20 @@ func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button 
 		if lead != nil {
 			lead()
 		}
+		// Headings sit beside their choices, so a pane of groups fits the
+		// panel without scrolling.
 		for _, group := range groups {
-			if group.name != "" {
-				ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
-			}
-			ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
-				for _, code := range group.codes {
-					button(code)
-				}
+			ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Start).Children(func() {
+				ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted).Width(t.Rem(5.5)).Shrink(0).Padding(t.Space(1), 0)
+				ui.Row(c).Grow(1).Wrap().Gap(t.Space(1)).Children(func() {
+					for _, code := range group.codes {
+						short := ""
+						if group.short != nil {
+							short = group.short(code)
+						}
+						button(code, short)
+					}
+				})
 			})
 		}
 	})
@@ -881,19 +887,28 @@ func choosable(key protocol.Key) bool {
 
 // tapButton offers code for the tap. While the key has a hold, only a basic
 // key can join it.
-func (a *app) tapButton(c *ui.Context, code uint16) ui.Element {
+func (a *app) tapButton(c *ui.Context, code uint16, short string) ui.Element {
 	tap, hold := a.tapHold()
-	return a.choiceButton(c, fmt.Sprintf("kc-%04x", code), buttonName(a.kb, code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
+	return a.choiceButton(c, fmt.Sprintf("kc-%04x", code), buttonName(a.kb, code), short, code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
 		a.assignTapHold(code, hold)
 	})
 }
 
-func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, pick func()) ui.Element {
+// choiceButton offers one choice named label, showing short instead when
+// it is set.
+func (a *app) choiceButton(c *ui.Context, key, label, short string, chosen, off bool, pick func()) ui.Element {
+	text := label
+	if short != "" {
+		text = short
+	}
 	var b ui.Element
 	if chosen {
-		b = ui.PrimaryButton(c.Key(key), label)
+		b = ui.PrimaryButton(c.Key(key), text)
 	} else {
-		b = ui.Button(c.Key(key), label)
+		b = ui.Button(c.Key(key), text)
+	}
+	if short != "" {
+		b.Label(label).Tooltip(label)
 	}
 	// Choices keep their width in a wrapping row and line up as keycaps.
 	return b.Padding(c.Theme().Space(1), c.Theme().Space(2)).MinWidth(c.Theme().Rem(2.4)).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
@@ -902,19 +917,28 @@ func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, p
 type keyGroup struct {
 	name  string
 	codes []uint16
+	// short, when set, is the text a choice shows, as a layer's number
+	// under a heading that names the action; the full name stays its label.
+	short func(code uint16) string
+}
+
+// layerNumber is the layer a layer keycode names, as short text.
+func layerNumber(code uint16) string {
+	return strconv.Itoa(int(code & 0x1F))
 }
 
 type keyKind int
 
 const (
 	kindBasic keyKind = iota
+	kindOther
 	kindLayer
 	kindMacro
 	kindCustom
 )
 
 func (a *app) keyKinds() []keyKind {
-	kinds := []keyKind{kindBasic, kindLayer}
+	kinds := []keyKind{kindBasic, kindOther, kindLayer}
 	if a.kb != nil && a.kb.Macros > 0 {
 		kinds = append(kinds, kindMacro)
 	}
@@ -926,6 +950,8 @@ func (a *app) keyKinds() []keyKind {
 
 func kindLabel(kind keyKind) string {
 	switch kind {
+	case kindOther:
+		return "その他"
 	case kindLayer:
 		return "レイヤー操作"
 	case kindMacro:
@@ -957,12 +983,12 @@ func (a *app) picker(c *ui.Context) {
 		groups = macroPalette(a.kb)
 	case kindCustom:
 		groups = customPalette(a.kb)
-	default:
+	case kindOther:
 		groups = palette()
 	}
 	var note string
 	switch _, hold := a.tapHold(); {
-	case hold != 0 && kinds[a.pick] != kindBasic:
+	case hold != 0 && kinds[a.pick] != kindBasic && kinds[a.pick] != kindOther:
 		note = "長押しがあるあいだは、基本キーだけを選べます"
 	case kinds[a.pick] == kindMacro:
 		note = "割り当てだけです。マクロの中身はまだ編集できません"
@@ -971,7 +997,7 @@ func (a *app) picker(c *ui.Context) {
 	if kinds[a.pick] == kindBasic {
 		lead = func() { a.basicBoard(c) }
 	}
-	choices(c, note, lead, groups, func(code uint16) { a.tapButton(c, code) })
+	choices(c, note, lead, groups, func(code uint16, short string) { a.tapButton(c, code, short) })
 }
 
 // pickKey is one key of the basic board, w units wide; code room is space.
@@ -1008,7 +1034,7 @@ func (a *app) basicBoard(c *ui.Context) {
 						ui.Box(c).Width(width).Shrink(0)
 						continue
 					}
-					b := a.tapButton(c, key.code).Width(width).MinWidth(width).Height(unit).Padding(0)
+					b := a.tapButton(c, key.code, "").Width(width).MinWidth(width).Height(unit).Padding(0)
 					// A symbol reads at full size, a word smaller, as on keycaps.
 					switch n := utf8.RuneCountInString(buttonName(a.kb, key.code)); {
 					case n > 3:
@@ -1038,13 +1064,13 @@ func layerPalette(kb *protocol.Keyboard) []keyGroup {
 	ops := []op{
 		{"切り替え", 32, protocol.ToggleLayer},
 		{"移動", 32, protocol.ToLayer},
-		{"タップで切り替え", 32, protocol.TapToggleLayer},
+		{"タップ切替", 32, protocol.TapToggleLayer},
 		{"一度だけ", 32, protocol.OneShotLayer},
 		{"既定", 32, protocol.DefaultLayer},
 	}
 	groups := make([]keyGroup, 0, len(ops))
 	for _, item := range ops {
-		groups = append(groups, keyGroup{name: item.name, codes: layerCodes(n, item.limit, item.make)})
+		groups = append(groups, keyGroup{name: item.name, codes: layerCodes(n, item.limit, item.make), short: layerNumber})
 	}
 	return groups
 }
@@ -1102,14 +1128,14 @@ func customPalette(kb *protocol.Keyboard) []keyGroup {
 	return []keyGroup{{name: "独自", codes: codes}}
 }
 
-// palette is the basic keys the board above it does not hold.
+// palette is the basic keys the basic board does not hold.
 func palette() []keyGroup {
 	return []keyGroup{
-		{name: "なし・透過", codes: []uint16{0x0000, 0x0001}},
 		{name: "日本語", codes: []uint16{0x0091, 0x0090, 0x0089, 0x0087, 0x008B, 0x008A}},
 		{name: "メディア", codes: []uint16{0x00A8, 0x00AA, 0x00A9, 0x00AC, 0x00AE, 0x00AB, 0x00BE, 0x00BD}},
-		{name: "マウス", codes: []uint16{0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D9, 0x00DA, 0x00DB, 0x00DC}},
-		{name: "その他", codes: []uint16{0x0046, 0x0047, 0x0048}},
+		{name: "マウス", codes: []uint16{0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3}},
+		{name: "ホイール", codes: []uint16{0x00D9, 0x00DA, 0x00DB, 0x00DC}},
+		{name: "その他", codes: []uint16{0x0000, 0x0001, 0x0046, 0x0047, 0x0048}},
 	}
 }
 
