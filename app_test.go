@@ -263,3 +263,17 @@ func TestLockCommandWithoutKeyboard(t *testing.T) {
 		t.Fatal("reload command disabled while idle")
 	}
 }
+
+func TestDeviceNameWinsOverDefinition(t *testing.T) {
+	a := newApp()
+	a.kb = &protocol.Keyboard{Name: "HID Keyboard", Layers: 1}
+	a.infos = []hid.Info{{Name: "Cornix", Entry: 7}}
+	a.entry = 7
+	if got := a.keyboardName(); got != "Cornix" {
+		t.Fatalf("name %q", got)
+	}
+	a.infos = []hid.Info{{Name: " ", Entry: 7}}
+	if got := a.keyboardName(); got != "HID Keyboard" {
+		t.Fatalf("blank device name gave %q", got)
+	}
+}

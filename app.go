@@ -129,8 +129,8 @@ func (a *app) installMenus() {
 
 func (a *app) syncWindowTitle() {
 	title := "Govial"
-	if a.kb != nil && a.kb.Name != "" {
-		title = a.kb.Name
+	if name := a.keyboardName(); name != "" {
+		title = name
 	}
 	if a.win == nil || title == a.windowTitle {
 		return
@@ -223,8 +223,8 @@ func iconButton(c *ui.Context, key, symbol string, fallback *ui.SVG, label strin
 
 func (a *app) deviceSelect(c *ui.Context) {
 	if len(a.infos) < 2 {
-		if a.kb != nil && a.kb.Name != "" {
-			ui.Text(c, a.kb.Name).Bold().Tooltip(a.kb.UIDString())
+		if name := a.keyboardName(); name != "" {
+			ui.Text(c, name).Bold().Tooltip(a.kb.UIDString())
 		}
 		return
 	}
@@ -244,6 +244,23 @@ func (a *app) deviceSelect(c *ui.Context) {
 			}
 		}
 	}
+}
+
+// keyboardName is the product name the device reports, which names the
+// board itself, or else the name in its Vial definition, which is often a
+// placeholder such as "HID Keyboard".
+func (a *app) keyboardName() string {
+	if a.kb == nil {
+		return ""
+	}
+	for _, info := range a.infos {
+		if info.Entry == a.entry {
+			if name := strings.TrimSpace(info.Name); name != "" {
+				return name
+			}
+		}
+	}
+	return a.kb.Name
 }
 
 func deviceNames(infos []hid.Info) []string {
