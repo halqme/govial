@@ -124,13 +124,16 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 	if err := tt.Click("レイヤー操作"); err != nil {
 		t.Fatal(err)
 	}
-	for _, label := range []string{"MO(2)", "TG(0)", "TO(0)", "TT(0)", "OSL(0)", "DF(0)"} {
+	for _, label := range []string{"TG(2)", "TO(0)", "TT(0)", "OSL(0)", "DF(0)"} {
 		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
 			t.Fatalf("%s missing", label)
 		}
 	}
-	if _, ok := tt.AccessByRole(ui.RoleButton, "MO(3)"); ok {
+	if _, ok := tt.AccessByRole(ui.RoleButton, "TG(3)"); ok {
 		t.Fatal("layer key past the last layer")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "MO(0)"); ok {
+		t.Fatal("MO is a hold, but the tap offers it")
 	}
 	if err := tt.Click("マクロ"); err != nil {
 		t.Fatal(err)
@@ -155,21 +158,49 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 	}
 }
 
-func TestHoldLayerUsesTheCurrentBasicKey(t *testing.T) {
-	groups := layerPalette(&protocol.Keyboard{Layers: 2}, 0x002C)
-	var hold []uint16
-	for _, group := range groups {
-		if group.name == "ホールド" {
-			hold = group.codes
+func TestHoldSlotOffersLayersAndModifiers(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Layers: 20,
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "レイヤー 1"); ok {
+		t.Fatal("hold choices show while the tap slot is chosen")
+	}
+	if err := tt.Click("長押し"); err != nil {
+		t.Fatal(err)
+	}
+	if a.slot != slotHold {
+		t.Fatalf("slot %q", a.slot)
+	}
+	for _, label := range []string{"なし", "レイヤー 0", "レイヤー 15", "⌃", "右⌘", "⌃⇧⌥⌘"} {
+		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
+			t.Fatalf("%s missing: %q", label, tt.Texts())
 		}
 	}
-	if len(hold) != 2 || hold[0] != 0x402C || hold[1] != 0x412C {
-		t.Fatalf("hold %#x", hold)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "レイヤー 16"); ok {
+		t.Fatal("LT reaches layer 15, but layer 16 is offered")
 	}
-	for _, group := range layerPalette(&protocol.Keyboard{Layers: 2}, 0x0104) {
-		if group.name == "ホールド" {
-			t.Fatal("a modified key cannot be the tap side")
-		}
+}
+
+func TestKnobHasNoHoldSlot(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.slot = slotHold
+	a.kb = &protocol.Keyboard{
+		Layers: 1,
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, Encoder: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if tt.HasText("長押し") {
+		t.Fatal("a knob offers a hold")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); !ok {
+		t.Fatal("a knob does not offer its keys")
 	}
 }
 

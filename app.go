@@ -47,6 +47,7 @@ type app struct {
 	unit       float32
 	inset      ui.Point
 	pick       int
+	slot       string
 	layout     []int
 	layoutKB   *protocol.Keyboard
 	reloadItem *mygo.MenuItem
@@ -57,7 +58,7 @@ type app struct {
 }
 
 func newApp() *app {
-	return &app{sel: -1, hot: -1, boardShare: 64}
+	return &app{sel: -1, hot: -1, boardShare: 64, slot: slotTap}
 }
 
 func (a *app) view(c *ui.Context) {
@@ -587,6 +588,10 @@ func (a *app) holding(key protocol.Key) bool {
 
 func (a *app) inspector(c *ui.Context) {
 	t := c.Theme()
+	if key, ok := a.editable(); ok {
+		a.assignPane(c, key)
+		return
+	}
 	ui.Scroll(c).Fill().Background(t.Surface).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
 		if a.unlocking {
 			ui.Text(c, "解除").TextColor(t.TextMuted)
@@ -606,15 +611,159 @@ func (a *app) inspector(c *ui.Context) {
 			return
 		}
 		a.keySummary(c, key)
-		if !a.unlocked {
-			a.lockNote(c)
-			a.inspectorFoot(c)
-			return
-		}
-		ui.Divider(c)
-		a.picker(c)
+		a.lockNote(c)
 		a.inspectorFoot(c)
 	})
+}
+
+// editable is the selected key when it can be assigned now.
+func (a *app) editable() (protocol.Key, bool) {
+	if a.kb == nil || a.unlocking || !a.unlocked || a.sel < 0 || a.sel >= len(a.kb.Keys) {
+		return protocol.Key{}, false
+	}
+	key := a.kb.Keys[a.sel]
+	return key, key.HasMatrix || key.Encoder
+}
+
+// assignPane keeps the key and its slots in place while the choices for
+// the chosen slot scroll beside them.
+func (a *app) assignPane(c *ui.Context, key protocol.Key) {
+	t := c.Theme()
+	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Surface).Children(func() {
+		ui.Column(c).Width(t.Rem(13)).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+			a.keySummary(c, key)
+			a.slots(c, key)
+		})
+		ui.Scroll(c).Grow(1).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+			if a.slotOf(key) == slotHold {
+				a.holdPicker(c)
+			} else {
+				a.picker(c)
+			}
+		})
+	})
+}
+
+// The slots are what a key does on a tap and on a hold. A key with both is
+// one LT or mod-tap keycode; the keyboard has no other place for them.
+const (
+	slotTap  = "tap"
+	slotHold = "hold"
+)
+
+// slotOf is the slot being edited. A knob turns, so it has only a tap.
+func (a *app) slotOf(key protocol.Key) string {
+	if key.Encoder {
+		return slotTap
+	}
+	return a.slot
+}
+
+func (a *app) slots(c *ui.Context, key protocol.Key) {
+	if key.Encoder {
+		return
+	}
+	tap, hold := a.tapHold()
+	ui.Sidebar(c, &a.slot, func() {
+		ui.SidebarItem(c, slotTap, nil, "タップ").Children(func() {
+			ui.Badge(c, a.tapLabel(tap))
+		})
+		ui.SidebarItem(c, slotHold, nil, "長押し").Children(func() {
+			ui.Badge(c, holdLabel(hold))
+		})
+	}).Label("動作")
+}
+
+// tapHold is the selected key's code read as a tap and a hold.
+func (a *app) tapHold() (tap, hold uint16) {
+	code := a.current()
+	if code == 0xFFFF {
+		return 0, 0
+	}
+	return protocol.SplitTapHold(code)
+}
+
+func (a *app) tapLabel(tap uint16) string {
+	if tap == 0 {
+		return "なし"
+	}
+	return a.buttonLabel(tap)
+}
+
+func holdLabel(hold uint16) string {
+	switch {
+	case hold == 0:
+		return "なし"
+	case hold >= 0x5220 && hold <= 0x523F:
+		return fmt.Sprintf("レイヤー %d", hold-0x5220)
+	}
+	mods := byte(hold >> 8)
+	var b strings.Builder
+	if mods&0x10 != 0 {
+		b.WriteString("右")
+	}
+	for _, m := range []struct {
+		bit  byte
+		sign string
+	}{{0x01, "⌃"}, {0x02, "⇧"}, {0x04, "⌥"}, {0x08, "⌘"}} {
+		if mods&m.bit != 0 {
+			b.WriteString(m.sign)
+		}
+	}
+	return b.String()
+}
+
+// holdPicker offers what a hold can do: a layer while held, or modifiers.
+func (a *app) holdPicker(c *ui.Context) {
+	t := c.Theme()
+	tap, hold := a.tapHold()
+	open := tap <= 0xFF
+	if !open {
+		ui.Text(c, "長押しを付けられるのは、修飾のない基本キーだけです").TextColor(t.TextMuted)
+	}
+	layers := 0
+	if a.kb != nil {
+		layers = a.kb.Layers
+	}
+	if layers > 16 {
+		layers = 16
+	}
+	var layerHolds []uint16
+	for layer := 0; layer < layers; layer++ {
+		code, _ := protocol.MomentaryLayer(layer)
+		layerHolds = append(layerHolds, code)
+	}
+	var modHolds []uint16
+	for _, mods := range []byte{0x01, 0x02, 0x04, 0x08, 0x11, 0x12, 0x14, 0x18, 0x07, 0x0F} {
+		modHolds = append(modHolds, protocol.ModHold(mods))
+	}
+	groups := []keyGroup{
+		{codes: []uint16{0}},
+		{name: "押している間のレイヤー", codes: layerHolds},
+		{name: "修飾", codes: modHolds},
+	}
+	for _, group := range groups {
+		if group.name != "" {
+			ui.Text(c, group.name).TextColor(t.TextMuted)
+		}
+		ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
+			for _, code := range group.codes {
+				a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), code == hold, code != 0 && !open, func() {
+					a.assignTapHold(tap, code)
+				})
+			}
+		})
+	}
+}
+
+// assignTapHold writes tap and hold as the one keycode that carries both.
+func (a *app) assignTapHold(tap, hold uint16) {
+	code, ok := protocol.JoinTapHold(tap, hold)
+	if !ok {
+		a.err = "長押しを付けられるのは、修飾のない基本キーだけです"
+		return
+	}
+	a.assign(code)
 }
 
 func (a *app) keySummary(c *ui.Context, key protocol.Key) {
@@ -667,16 +816,23 @@ func choosable(key protocol.Key) bool {
 	return key.W >= 0 && (key.HasMatrix || key.Encoder)
 }
 
-func (a *app) codeButton(c *ui.Context, code uint16) {
-	label := a.buttonLabel(code)
-	key := fmt.Sprintf("kc-%04x", code)
+// tapButton offers code for the tap. While the key has a hold, only a basic
+// key can join it.
+func (a *app) tapButton(c *ui.Context, code uint16) {
+	tap, hold := a.tapHold()
+	a.choiceButton(c, fmt.Sprintf("kc-%04x", code), a.buttonLabel(code), code == tap && a.current() != 0xFFFF, hold != 0 && code > 0xFF, func() {
+		a.assignTapHold(code, hold)
+	})
+}
+
+func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, pick func()) {
 	var b ui.Element
-	if code == a.current() {
+	if chosen {
 		b = ui.PrimaryButton(c.Key(key), label)
 	} else {
 		b = ui.Button(c.Key(key), label)
 	}
-	b.Padding(c.Theme().Space(1), c.Theme().Space(2)).Disabled(a.busy || a.unlocking || !a.unlocked).OnClick(func() { a.assign(code) })
+	b.Padding(c.Theme().Space(1), c.Theme().Space(2)).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
 }
 
 type keyGroup struct {
@@ -732,13 +888,16 @@ func (a *app) picker(c *ui.Context) {
 	var groups []keyGroup
 	switch kinds[a.pick] {
 	case kindLayer:
-		groups = layerPalette(a.kb, a.current())
+		groups = layerPalette(a.kb)
 	case kindMacro:
 		groups = macroPalette(a.kb)
 	case kindCustom:
 		groups = customPalette(a.kb)
 	default:
 		groups = palette()
+	}
+	if _, hold := a.tapHold(); hold != 0 && kinds[a.pick] != kindBasic {
+		ui.Text(c, "長押しがあるあいだは、基本キーだけを選べます").TextColor(t.TextMuted)
 	}
 	if kinds[a.pick] == kindMacro {
 		ui.Text(c, "割り当てだけです。マクロの中身はまだ編集できません").TextColor(t.TextMuted)
@@ -747,7 +906,7 @@ func (a *app) picker(c *ui.Context) {
 		ui.Text(c, group.name).TextColor(t.TextMuted)
 		ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
 			for _, code := range group.codes {
-				a.codeButton(c, code)
+				a.tapButton(c, code)
 			}
 		})
 	}
@@ -762,7 +921,7 @@ func (a *app) buttonLabel(code uint16) string {
 	return pickerLabel(code)
 }
 
-func layerPalette(kb *protocol.Keyboard, tap uint16) []keyGroup {
+func layerPalette(kb *protocol.Keyboard) []keyGroup {
 	n := 0
 	if kb != nil {
 		n = kb.Layers
@@ -776,21 +935,15 @@ func layerPalette(kb *protocol.Keyboard, tap uint16) []keyGroup {
 		make  func(int) (uint16, bool)
 	}
 	ops := []op{
-		{"押している間", 32, protocol.MomentaryLayer},
 		{"切り替え", 32, protocol.ToggleLayer},
 		{"移動", 32, protocol.ToLayer},
 		{"タップで切り替え", 32, protocol.TapToggleLayer},
 		{"一度だけ", 32, protocol.OneShotLayer},
 		{"既定", 32, protocol.DefaultLayer},
 	}
-	groups := make([]keyGroup, 0, len(ops)+1)
+	groups := make([]keyGroup, 0, len(ops))
 	for _, item := range ops {
 		groups = append(groups, keyGroup{name: item.name, codes: layerCodes(n, item.limit, item.make)})
-	}
-	if tap <= 0xFF {
-		groups = append(groups, keyGroup{name: "ホールド", codes: layerCodes(n, 16, func(layer int) (uint16, bool) {
-			return protocol.LayerTap(layer, tap)
-		})})
 	}
 	return groups
 }
