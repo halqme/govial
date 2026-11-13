@@ -641,13 +641,15 @@ func (a *app) panel(c *ui.Context) {
 				a.slots(c, key)
 			}
 		})
-		ui.Scroll(c).Grow(1).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+		ui.Column(c).Grow(1).Children(func() {
 			switch {
 			case !key.HasMatrix && !key.Encoder:
-				ui.Text(c, "このキーはマトリクスにありません").TextColor(t.TextMuted)
+				ui.Text(c, "このキーはマトリクスにありません").TextColor(t.TextMuted).Margin(t.Space(4))
 			case !a.unlocked:
-				a.lockNote(c)
-				ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock).AlignSelf(ui.Start)
+				ui.Column(c).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+					a.lockNote(c)
+					ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock).AlignSelf(ui.Start)
+				})
 			case a.slotOf(key) == slotHold:
 				a.holdPicker(c)
 			default:
@@ -737,12 +739,8 @@ func holdLabel(hold uint16) string {
 
 // holdPicker offers what a hold can do: a layer while held, or modifiers.
 func (a *app) holdPicker(c *ui.Context) {
-	t := c.Theme()
 	tap, hold := a.tapHold()
 	open := tap <= 0xFF
-	if !open {
-		ui.Text(c, "長押しを付けられるのは、修飾のない基本キーだけです").TextColor(t.TextMuted)
-	}
 	layers := 0
 	if a.kb != nil {
 		layers = a.kb.Layers
@@ -764,18 +762,36 @@ func (a *app) holdPicker(c *ui.Context) {
 		{name: "押している間のレイヤー", codes: layerHolds},
 		{name: "修飾", codes: modHolds},
 	}
-	for _, group := range groups {
-		if group.name != "" {
-			ui.Text(c, group.name).TextColor(t.TextMuted)
-		}
-		ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
-			for _, code := range group.codes {
-				a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), code == hold, code != 0 && !open, func() {
-					a.assignTapHold(tap, code)
-				})
-			}
-		})
+	var note string
+	if !open {
+		note = "長押しを付けられるのは、修飾のない基本キーだけです"
 	}
+	choices(c, note, groups, func(code uint16) {
+		a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), code == hold, code != 0 && !open, func() {
+			a.assignTapHold(tap, code)
+		})
+	})
+}
+
+// choices scrolls groups of choice buttons under their headings, after a
+// note when there is one.
+func choices(c *ui.Context, note string, groups []keyGroup, button func(code uint16)) {
+	t := c.Theme()
+	ui.Scroll(c).Grow(1).Padding(t.Space(3), t.Space(4), t.Space(4), t.Space(4)).Gap(t.Space(2)).Children(func() {
+		if note != "" {
+			ui.Text(c, note).TextColor(t.TextMuted)
+		}
+		for _, group := range groups {
+			if group.name != "" {
+				ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+			}
+			ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
+				for _, code := range group.codes {
+					button(code)
+				}
+			})
+		}
+	})
 }
 
 // assignTapHold writes tap and hold as the one keycode that carries both.
@@ -846,7 +862,8 @@ func (a *app) choiceButton(c *ui.Context, key, label string, chosen, off bool, p
 	} else {
 		b = ui.Button(c.Key(key), label)
 	}
-	b.Padding(c.Theme().Space(1), c.Theme().Space(2)).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
+	// Choices keep their width in a wrapping row and line up as keycaps.
+	b.Padding(c.Theme().Space(1), c.Theme().Space(2)).MinWidth(c.Theme().Rem(2.4)).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
 }
 
 type keyGroup struct {
@@ -898,7 +915,7 @@ func (a *app) picker(c *ui.Context) {
 		labels[i] = kindLabel(kind)
 	}
 	// Segmented switches which keys are offered. Tabs would be the same pages with more chrome.
-	ui.Segmented(c, &a.pick, labels...).Label("キーの種類").Sticky().Top(0).Background(t.Surface)
+	ui.Segmented(c, &a.pick, labels...).Label("キーの種類").AlignSelf(ui.Start).Margin(t.Space(4), t.Space(4), 0, t.Space(4))
 	var groups []keyGroup
 	switch kinds[a.pick] {
 	case kindLayer:
@@ -910,20 +927,14 @@ func (a *app) picker(c *ui.Context) {
 	default:
 		groups = palette()
 	}
-	if _, hold := a.tapHold(); hold != 0 && kinds[a.pick] != kindBasic {
-		ui.Text(c, "長押しがあるあいだは、基本キーだけを選べます").TextColor(t.TextMuted)
+	var note string
+	switch _, hold := a.tapHold(); {
+	case hold != 0 && kinds[a.pick] != kindBasic:
+		note = "長押しがあるあいだは、基本キーだけを選べます"
+	case kinds[a.pick] == kindMacro:
+		note = "割り当てだけです。マクロの中身はまだ編集できません"
 	}
-	if kinds[a.pick] == kindMacro {
-		ui.Text(c, "割り当てだけです。マクロの中身はまだ編集できません").TextColor(t.TextMuted)
-	}
-	for _, group := range groups {
-		ui.Text(c, group.name).TextColor(t.TextMuted)
-		ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
-			for _, code := range group.codes {
-				a.tapButton(c, code)
-			}
-		})
-	}
+	choices(c, note, groups, func(code uint16) { a.tapButton(c, code) })
 }
 
 func layerPalette(kb *protocol.Keyboard) []keyGroup {
