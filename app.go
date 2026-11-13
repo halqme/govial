@@ -17,9 +17,9 @@ import (
 	"github.com/halqme/govial/protocol"
 )
 
-// keyUnit is the size of a 1u keycap in DIPs. It stays fixed so the
-// layout's proportions do not follow the text size.
-const keyUnit = 54.0
+// keyUnit is the largest 1u keycap in DIPs, which a wide window reaches.
+// It is fixed so the layout's proportions do not follow the text size.
+const keyUnit = 72.0
 
 // keyboardIcon is shown where the system has no SF Symbol.
 var keyboardIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M6 10h2v2H6zm4 0h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2zM7 14h10v2H7z"/></svg>`))
