@@ -42,14 +42,18 @@ type app struct {
 	remain      int
 	hold        []protocol.KeyPos
 	boardShare  float32
-	pick        int
-	layout      []int
-	layoutKB    *protocol.Keyboard
-	reloadItem  *mygo.MenuItem
-	lockItem    *mygo.MenuItem
-	reloadOn    bool
-	lockOn      bool
-	lockLabel   string
+	// unit and inset are the keycap scale and offset of the last drawn
+	// board, so pointer hits match what is on screen.
+	unit       float32
+	inset      ui.Point
+	pick       int
+	layout     []int
+	layoutKB   *protocol.Keyboard
+	reloadItem *mygo.MenuItem
+	lockItem   *mygo.MenuItem
+	reloadOn   bool
+	lockOn     bool
+	lockLabel  string
 }
 
 func newApp() *app {
@@ -359,64 +363,73 @@ func (a *app) board(c *ui.Context) {
 	width, height := boardSize(keys)
 	// pad is the inset around the keycaps, inside the painted canvas.
 	const pad = float32(18)
-	ui.ScrollBoth(c).Grow(1).Children(func() {
-		ui.Column(c).MinWidthPercent(100).MinHeightPercent(100).Center().Children(func() {
-			// Painted, not a grid of buttons: keycaps rotate and overlap,
-			// which no collection widget lays out. MyGo v0.9.0.
-			box := ui.Box(c).Width(width + pad*2).Height(height + pad*2).Focusable().Label("キー配列")
-			switch {
-			case box.Shortcut(0, ui.KeyLeft):
-				a.moveSelection(-1, 0)
-			case box.Shortcut(0, ui.KeyRight):
-				a.moveSelection(1, 0)
-			case box.Shortcut(0, ui.KeyUp):
-				a.moveSelection(0, -1)
-			case box.Shortcut(0, ui.KeyDown):
-				a.moveSelection(0, 1)
+	// Painted, not a grid of buttons: keycaps rotate and overlap,
+	// which no collection widget lays out. MyGo v0.9.0.
+	box := ui.Box(c).Grow(1).Focusable().Label("キー配列")
+	switch {
+	case box.Shortcut(0, ui.KeyLeft):
+		a.moveSelection(-1, 0)
+	case box.Shortcut(0, ui.KeyRight):
+		a.moveSelection(1, 0)
+	case box.Shortcut(0, ui.KeyUp):
+		a.moveSelection(0, -1)
+	case box.Shortcut(0, ui.KeyDown):
+		a.moveSelection(0, 1)
+	}
+	a.hot = -1
+	if px, py, ok := box.PointerPosition(); ok && a.unit > 0 {
+		for i := len(keys) - 1; i >= 0; i-- {
+			if keys[i].W < 0 {
+				continue
 			}
-			a.hot = -1
-			if px, py, ok := box.PointerPosition(); ok {
-				for i := len(keys) - 1; i >= 0; i-- {
-					if keys[i].W < 0 {
-						continue
-					}
-					if keys[i].Contains((float64(px)-float64(pad))/keyUnit, (float64(py)-float64(pad))/keyUnit) {
-						a.hot = i
-						break
-					}
-				}
+			if keys[i].Contains(float64((px-a.inset.X)/a.unit), float64((py-a.inset.Y)/a.unit)) {
+				a.hot = i
+				break
 			}
-			if a.hot >= 0 && (box.Clicked() || box.RightClicked()) {
-				a.sel = a.hot
+		}
+	}
+	if a.hot >= 0 && (box.Clicked() || box.RightClicked()) {
+		a.sel = a.hot
+	}
+	box.ContextMenu(func(m *ui.Menu) {
+		if a.sel >= 0 && a.sel < len(keys) {
+			name := keyLabel(a.kb, keys[a.sel], a.layer)
+			if name == "" {
+				name = "キー"
 			}
-			box.ContextMenu(func(m *ui.Menu) {
-				if a.sel >= 0 && a.sel < len(keys) {
-					name := keyLabel(a.kb, keys[a.sel], a.layer)
-					if name == "" {
-						name = "キー"
-					}
-					m.Item(name).Disabled(true)
-					m.Separator()
-				}
-				if m.Item("再読み込み").Disabled(a.busy).Chosen() {
-					a.refresh()
-				}
-				if a.dev != nil && m.Item(a.lockCommand()).Disabled(a.busy).Chosen() {
-					a.toggleLock()
-				}
-			})
-			box.Draw(func(p *ui.Painter, r ui.Rect) {
-				origin := r
-				origin.X += pad
-				origin.Y += pad
-				for i, key := range keys {
-					if key.W < 0 {
-						continue
-					}
-					a.drawKey(c, p, origin, i, key)
-				}
-			})
-		})
+			m.Item(name).Disabled(true)
+			m.Separator()
+		}
+		if m.Item("再読み込み").Disabled(a.busy).Chosen() {
+			a.refresh()
+		}
+		if a.dev != nil && m.Item(a.lockCommand()).Disabled(a.busy).Chosen() {
+			a.toggleLock()
+		}
+	})
+	box.Draw(func(p *ui.Painter, r ui.Rect) {
+		// The board shrinks to the space it is given, never past 1u = keyUnit.
+		unit := float32(keyUnit)
+		if fit := (r.W - pad*2) / width; fit < unit {
+			unit = fit
+		}
+		if fit := (r.H - pad*2) / height; fit < unit {
+			unit = fit
+		}
+		if unit < 1 {
+			return
+		}
+		a.unit = unit
+		a.inset = ui.Point{X: (r.W - width*unit) / 2, Y: (r.H - height*unit) / 2}
+		origin := r
+		origin.X += a.inset.X
+		origin.Y += a.inset.Y
+		for i, key := range keys {
+			if key.W < 0 {
+				continue
+			}
+			a.drawKey(c, p, origin, unit, i, key)
+		}
 	})
 }
 
@@ -469,17 +482,17 @@ func (a *app) moveSelection(dx, dy int) {
 	}
 }
 
-func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, i int, key protocol.Key) {
+func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i int, key protocol.Key) {
 	t := c.Theme()
-	ox := r.X + float32(key.RotX)*keyUnit
-	oy := r.Y + float32(key.RotY)*keyUnit
+	ox := r.X + float32(key.RotX)*unit
+	oy := r.Y + float32(key.RotY)*unit
 	p.Transform(ui.Rotation(float32(key.Rot)), ox, oy, func() {
 		const gap = float32(3.5)
 		const lip = float32(4)
-		x := r.X + float32(key.X)*keyUnit + gap
-		y := r.Y + float32(key.Y)*keyUnit + gap
-		w := float32(key.W)*keyUnit - gap*2
-		h := float32(key.H)*keyUnit - gap*2
+		x := r.X + float32(key.X)*unit + gap
+		y := r.Y + float32(key.Y)*unit + gap
+		w := float32(key.W)*unit - gap*2
+		h := float32(key.H)*unit - gap*2
 		if w < 8 || h < 8 {
 			return
 		}
@@ -948,7 +961,7 @@ func boardSize(keys []protocol.Key) (float32, float32) {
 	if h < 2 {
 		h = 2
 	}
-	return float32(w * keyUnit), float32(h * keyUnit)
+	return float32(w), float32(h)
 }
 
 func (a *app) refresh() {
