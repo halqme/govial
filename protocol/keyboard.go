@@ -23,6 +23,7 @@ type Keyboard struct {
 	UID          [8]byte
 	Rows, Cols   int
 	Layers       int
+	Macros       int
 	Keys         []Key
 	Custom       []string
 	codes        []uint16
@@ -338,6 +339,11 @@ func Read(ex Exchanger) (*Keyboard, error) {
 		return nil, err
 	}
 	kb.Layers = layers
+	macros, err := readMacroCount(ex)
+	if err != nil {
+		return nil, err
+	}
+	kb.Macros = macros
 
 	codes, err := readKeymap(ex, layers, kb.Rows, kb.Cols)
 	if err != nil {
@@ -361,6 +367,14 @@ func Read(ex Exchanger) (*Keyboard, error) {
 		kb.enc = enc
 	}
 	return kb, nil
+}
+
+func readMacroCount(ex Exchanger) (int, error) {
+	resp, err := call(ex, getMacroCount())
+	if err != nil {
+		return 0, err
+	}
+	return parseMacroCount(resp)
 }
 
 func readKeymap(ex Exchanger, layers, rows, cols int) ([]uint16, error) {

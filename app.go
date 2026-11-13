@@ -42,6 +42,7 @@ type app struct {
 	remain      int
 	hold        []protocol.KeyPos
 	boardShare  float32
+	pick        int
 	layout      []int
 	layoutKB    *protocol.Keyboard
 	reloadItem  *mygo.MenuItem
@@ -598,14 +599,7 @@ func (a *app) inspector(c *ui.Context) {
 			return
 		}
 		ui.Divider(c)
-		for _, group := range palette() {
-			ui.Text(c, group.name).TextColor(t.TextMuted)
-			ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
-				for _, code := range group.codes {
-					a.codeButton(c, code)
-				}
-			})
-		}
+		a.picker(c)
 		a.inspectorFoot(c)
 	})
 }
@@ -661,7 +655,7 @@ func choosable(key protocol.Key) bool {
 }
 
 func (a *app) codeButton(c *ui.Context, code uint16) {
-	label := pickerLabel(code)
+	label := a.buttonLabel(code)
 	key := fmt.Sprintf("kc-%04x", code)
 	var b ui.Element
 	if code == a.current() {
@@ -675,6 +669,170 @@ func (a *app) codeButton(c *ui.Context, code uint16) {
 type keyGroup struct {
 	name  string
 	codes []uint16
+}
+
+type keyKind int
+
+const (
+	kindBasic keyKind = iota
+	kindLayer
+	kindMacro
+	kindCustom
+)
+
+func (a *app) keyKinds() []keyKind {
+	kinds := []keyKind{kindBasic, kindLayer}
+	if a.kb != nil && a.kb.Macros > 0 {
+		kinds = append(kinds, kindMacro)
+	}
+	if a.kb != nil && len(a.kb.Custom) > 0 {
+		kinds = append(kinds, kindCustom)
+	}
+	return kinds
+}
+
+func kindLabel(kind keyKind) string {
+	switch kind {
+	case kindLayer:
+		return "レイヤー操作"
+	case kindMacro:
+		return "マクロ"
+	case kindCustom:
+		return "独自"
+	default:
+		return "基本"
+	}
+}
+
+func (a *app) picker(c *ui.Context) {
+	t := c.Theme()
+	kinds := a.keyKinds()
+	if a.pick < 0 || a.pick >= len(kinds) {
+		a.pick = 0
+	}
+	labels := make([]string, len(kinds))
+	for i, kind := range kinds {
+		labels[i] = kindLabel(kind)
+	}
+	// Segmented switches which keys are offered. Tabs would be the same pages with more chrome.
+	ui.Segmented(c, &a.pick, labels...).Label("キーの種類").Sticky().Top(0).Background(t.Surface)
+	var groups []keyGroup
+	switch kinds[a.pick] {
+	case kindLayer:
+		groups = layerPalette(a.kb, a.current())
+	case kindMacro:
+		groups = macroPalette(a.kb)
+	case kindCustom:
+		groups = customPalette(a.kb)
+	default:
+		groups = palette()
+	}
+	if kinds[a.pick] == kindMacro {
+		ui.Text(c, "割り当てだけです。マクロの中身はまだ編集できません").TextColor(t.TextMuted)
+	}
+	for _, group := range groups {
+		ui.Text(c, group.name).TextColor(t.TextMuted)
+		ui.Row(c).Wrap().Gap(t.Space(1)).Children(func() {
+			for _, code := range group.codes {
+				a.codeButton(c, code)
+			}
+		})
+	}
+}
+
+func (a *app) buttonLabel(code uint16) string {
+	if a.kb != nil && code >= 0x7E00 && code <= 0x7E3F {
+		if name := a.kb.Label(code); name != "" {
+			return name
+		}
+	}
+	return pickerLabel(code)
+}
+
+func layerPalette(kb *protocol.Keyboard, tap uint16) []keyGroup {
+	n := 0
+	if kb != nil {
+		n = kb.Layers
+	}
+	if n > 32 {
+		n = 32
+	}
+	type op struct {
+		name  string
+		limit int
+		make  func(int) (uint16, bool)
+	}
+	ops := []op{
+		{"押している間", 32, protocol.MomentaryLayer},
+		{"切り替え", 32, protocol.ToggleLayer},
+		{"移動", 32, protocol.ToLayer},
+		{"タップで切り替え", 32, protocol.TapToggleLayer},
+		{"一度だけ", 32, protocol.OneShotLayer},
+		{"既定", 32, protocol.DefaultLayer},
+	}
+	groups := make([]keyGroup, 0, len(ops)+1)
+	for _, item := range ops {
+		groups = append(groups, keyGroup{name: item.name, codes: layerCodes(n, item.limit, item.make)})
+	}
+	if tap <= 0xFF {
+		groups = append(groups, keyGroup{name: "ホールド", codes: layerCodes(n, 16, func(layer int) (uint16, bool) {
+			return protocol.LayerTap(layer, tap)
+		})})
+	}
+	return groups
+}
+
+func layerCodes(layers, limit int, code func(int) (uint16, bool)) []uint16 {
+	if layers < 0 {
+		layers = 0
+	}
+	if layers < limit {
+		limit = layers
+	}
+	codes := make([]uint16, 0, limit)
+	for layer := 0; layer < limit; layer++ {
+		got, ok := code(layer)
+		if ok {
+			codes = append(codes, got)
+		}
+	}
+	return codes
+}
+
+func macroPalette(kb *protocol.Keyboard) []keyGroup {
+	n := 0
+	if kb != nil {
+		n = kb.Macros
+	}
+	if n > 128 {
+		n = 128
+	}
+	codes := make([]uint16, 0, n)
+	for i := 0; i < n; i++ {
+		code, ok := protocol.MacroKey(i)
+		if ok {
+			codes = append(codes, code)
+		}
+	}
+	if len(codes) == 0 {
+		return nil
+	}
+	return []keyGroup{{name: "マクロ", codes: codes}}
+}
+
+func customPalette(kb *protocol.Keyboard) []keyGroup {
+	if kb == nil || len(kb.Custom) == 0 {
+		return nil
+	}
+	n := len(kb.Custom)
+	if n > 64 {
+		n = 64
+	}
+	codes := make([]uint16, n)
+	for i := range codes {
+		codes[i] = uint16(0x7E00 + i)
+	}
+	return []keyGroup{{name: "独自", codes: codes}}
 }
 
 func palette() []keyGroup {

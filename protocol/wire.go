@@ -18,6 +18,7 @@ const (
 	cmdSetKeyboardValue   = 0x03
 	cmdGetKeycode         = 0x04
 	cmdSetKeycode         = 0x05
+	cmdMacroGetCount      = 0x0C
 	cmdGetLayerCount      = 0x11
 	cmdKeymapGetBuffer    = 0x12
 	cmdVialPrefix         = 0xFE
@@ -124,6 +125,25 @@ func definitionChunk(resp []byte, remain int) ([]byte, error) {
 	out := make([]byte, n)
 	copy(out, resp[:n])
 	return out, nil
+}
+
+func getMacroCount() []byte { return []byte{cmdMacroGetCount} }
+
+// parseMacroCount reads the VIA macro-count reply. A reply that is not that
+// command means the keyboard has no macro slots to offer.
+func parseMacroCount(resp []byte) (int, error) {
+	resp, err := report(resp)
+	if err != nil {
+		return 0, err
+	}
+	if resp[0] != cmdMacroGetCount {
+		return 0, nil
+	}
+	n := int(resp[1])
+	if n > 128 {
+		n = 128
+	}
+	return n, nil
 }
 
 func getLayerCount() []byte { return []byte{cmdGetLayerCount} }

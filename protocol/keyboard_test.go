@@ -65,6 +65,41 @@ func TestReadKeyboard(t *testing.T) {
 	}
 }
 
+func TestMacroCountComesFromTheKeyboard(t *testing.T) {
+	payload, err := hex.DecodeString(pythonXz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := make([]uint16, 8)
+	dev := &fakeKeyboard{payload: payload, layers: 2, codes: codes, macros: 4}
+	kb, err := Read(dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kb.Macros != 4 {
+		t.Fatalf("macros %d", kb.Macros)
+	}
+	dev = &fakeKeyboard{payload: payload, layers: 2, codes: codes, macros: 200}
+	kb, err = Read(dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kb.Macros != 128 {
+		t.Fatalf("assignable macros %d", kb.Macros)
+	}
+	dev = &fakeKeyboard{payload: payload, layers: 2, codes: codes, macros: -1}
+	kb, err = Read(dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kb.Macros != 0 {
+		t.Fatalf("unanswered macros %d", kb.Macros)
+	}
+	if _, ok := kb.Code(0, 0, 0); !ok {
+		t.Fatal("keymap missing when the keyboard does not answer the macro command")
+	}
+}
+
 func TestReadRejectsBadDevice(t *testing.T) {
 	payload, err := hex.DecodeString(pythonXz)
 	if err != nil {
@@ -160,6 +195,7 @@ type fakeKeyboard struct {
 	hold      []KeyPos
 	reqs      [][]byte
 	enc       [][2]uint16
+	macros    int
 }
 
 func (f *fakeKeyboard) Exchange(msg []byte) ([]byte, error) {
@@ -184,6 +220,11 @@ func (f *fakeKeyboard) Exchange(msg []byte) ([]byte, error) {
 		binary.BigEndian.PutUint16(resp[1:3], uint16(via))
 	case cmdGetLayerCount:
 		resp[1] = byte(f.layers)
+	case cmdMacroGetCount:
+		if f.macros >= 0 {
+			resp[0] = cmdMacroGetCount
+			resp[1] = byte(f.macros)
+		}
 	case cmdGetKeycode:
 		code, ok := f.codeAt(int(msg[1]), int(msg[2]), int(msg[3]))
 		if !ok {

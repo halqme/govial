@@ -53,6 +53,61 @@ func KeyName(code uint16) string {
 	}
 }
 
+// MomentaryLayer is MO(layer): the layer stays while the key is held.
+// Layers are 0 through 31.
+func MomentaryLayer(layer int) (uint16, bool) {
+	return layerCode(0x5220, layer, 31)
+}
+
+// ToggleLayer is TG(layer).
+func ToggleLayer(layer int) (uint16, bool) {
+	return layerCode(0x5260, layer, 31)
+}
+
+// ToLayer is TO(layer): the key switches to that layer.
+func ToLayer(layer int) (uint16, bool) {
+	return layerCode(0x5200, layer, 31)
+}
+
+// TapToggleLayer is TT(layer).
+func TapToggleLayer(layer int) (uint16, bool) {
+	return layerCode(0x52C0, layer, 31)
+}
+
+// OneShotLayer is OSL(layer).
+func OneShotLayer(layer int) (uint16, bool) {
+	return layerCode(0x5280, layer, 31)
+}
+
+// DefaultLayer is DF(layer).
+func DefaultLayer(layer int) (uint16, bool) {
+	return layerCode(0x5240, layer, 31)
+}
+
+func layerCode(base uint16, layer, max int) (uint16, bool) {
+	if layer < 0 || layer > max {
+		return 0, false
+	}
+	return base + uint16(layer), true
+}
+
+// LayerTap is LT(layer, tap). The layer is 0 through 15 and tap is one
+// basic keycode.
+func LayerTap(layer int, tap uint16) (uint16, bool) {
+	if layer < 0 || layer > 15 || tap > 0xFF {
+		return 0, false
+	}
+	return 0x4000 | uint16(layer)<<8 | tap, true
+}
+
+// MacroKey is macro slot index, 0 through 127.
+func MacroKey(index int) (uint16, bool) {
+	if index < 0 || index > 127 {
+		return 0, false
+	}
+	return 0x7700 + uint16(index), true
+}
+
 func modifiedName(code uint16) string {
 	mods := byte((code >> 8) & 0x1F)
 	inner := byte(code)

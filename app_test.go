@@ -105,6 +105,72 @@ func TestLockedKeyboardHidesPalette(t *testing.T) {
 	}
 }
 
+func TestLayerAndMacroKeysAreOffered(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Layers: 3,
+		Macros: 2,
+		Custom: []string{"Foo"},
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "MO(0)"); ok {
+		t.Fatal("layer keys are mixed into the basic palette")
+	}
+	if err := tt.Click("レイヤー操作"); err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{"MO(2)", "TG(0)", "TO(0)", "TT(0)", "OSL(0)", "DF(0)"} {
+		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
+			t.Fatalf("%s missing", label)
+		}
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "MO(3)"); ok {
+		t.Fatal("layer key past the last layer")
+	}
+	if err := tt.Click("マクロ"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("割り当てだけです。マクロの中身はまだ編集できません") {
+		t.Fatal("macro note missing")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "M0"); !ok {
+		t.Fatal("M0 missing")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "M1"); !ok {
+		t.Fatal("M1 missing")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "M2"); ok {
+		t.Fatal("macro past the count")
+	}
+	if err := tt.Click("独自"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "Foo"); !ok {
+		t.Fatal("custom key name missing")
+	}
+}
+
+func TestHoldLayerUsesTheCurrentBasicKey(t *testing.T) {
+	groups := layerPalette(&protocol.Keyboard{Layers: 2}, 0x002C)
+	var hold []uint16
+	for _, group := range groups {
+		if group.name == "ホールド" {
+			hold = group.codes
+		}
+	}
+	if len(hold) != 2 || hold[0] != 0x402C || hold[1] != 0x412C {
+		t.Fatalf("hold %#x", hold)
+	}
+	for _, group := range layerPalette(&protocol.Keyboard{Layers: 2}, 0x0104) {
+		if group.name == "ホールド" {
+			t.Fatal("a modified key cannot be the tap side")
+		}
+	}
+}
+
 func TestLockCommandWithoutKeyboard(t *testing.T) {
 	a := newApp()
 	a.installMenus()
