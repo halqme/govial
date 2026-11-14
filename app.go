@@ -589,17 +589,32 @@ func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i i
 		}
 		p.Fill(ui.Rect{X: x, Y: y, W: w, H: faceH}, face, radius)
 		main, sub := capLabels(a.kb, key, a.layer)
+		// A custom name can break into lines, as "Next\nBT"; they stack.
+		lines := strings.Split(main, "\n")
+		longest := 0
+		for _, line := range lines {
+			longest = max(longest, utf8.RuneCountInString(line))
+		}
 		// Two sizes, so labels line up across the board; a label that still
 		// does not fit shrinks on its own as a last resort.
 		size := unit * 0.3
-		if utf8.RuneCountInString(main) > 3 {
+		if longest > 3 || len(lines) > 1 {
 			size *= 0.78
 		}
-		span := ui.Span{Text: main, Weight: 600, Size: size, Color: labelColor}
-		tw, th := p.MeasureText(0, span)
-		for span.Size > 7 && tw > w-unit*0.16 {
-			span.Size--
-			tw, th = p.MeasureText(0, span)
+		spans := make([]ui.Span, len(lines))
+		widths := make([]float32, len(lines))
+		var lineH float32
+		for {
+			fits := true
+			for i, line := range lines {
+				spans[i] = ui.Span{Text: line, Weight: 600, Size: size, Color: labelColor}
+				widths[i], lineH = p.MeasureText(0, spans[i])
+				fits = fits && widths[i] <= w-unit*0.16
+			}
+			if fits || size <= 7 {
+				break
+			}
+			size--
 		}
 		mainH := faceH
 		if sub != "" {
@@ -608,8 +623,12 @@ func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i i
 			sw, sh := p.MeasureText(0, small)
 			p.RichText(x+(w-sw)/2, y+faceH-sh-unit*0.06, 0, small)
 		}
-		if main != "" {
-			p.RichText(x+(w-tw)/2, y+(mainH-th)/2, 0, span)
+		if main == "" {
+			return
+		}
+		top := y + (mainH-lineH*float32(len(lines)))/2
+		for i := range lines {
+			p.RichText(x+(w-widths[i])/2, top+lineH*float32(i), 0, spans[i])
 		}
 	})
 }
@@ -645,24 +664,27 @@ func (a *app) holding(key protocol.Key) bool {
 }
 
 // panel is the floating pane for the chosen key: its slots and their
-// choices, or why it cannot be assigned yet. It shows while unlocking too.
+// choices, or why it cannot be assigned yet. It is always there, at one
+// height, so choosing a key or switching slots never moves the board: the
+// six rows of the basic board, under the kind switch.
 func (a *app) panel(c *ui.Context) {
-	chosen := a.kb != nil && a.sel >= 0 && a.sel < len(a.kb.Keys)
-	if !chosen && !a.unlocking {
-		return
-	}
 	t := c.Theme()
-	panel := ui.Row(c.Key("panel"))
-	if _, ok := a.editable(); ok {
-		// Fixed while editing, so switching slots does not move the board:
-		// the six rows of the basic board, under the kind switch.
-		u := pickUnit(c)
-		panel.Height(6*u + 5*pickSpacing(c) + t.Rem(2.25) + t.Space(10) + t.Space(1))
-	}
-	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
+	u := pickUnit(c)
+	panel := ui.Row(c.Key("panel")).Height(6*u + 5*pickSpacing(c) + t.Rem(2.25) + t.Space(10) + t.Space(1))
+	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).Border(1, t.Border).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
 		if a.unlocking {
 			ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Padding(t.Space(4)).Children(func() {
 				a.unlockStatus(c)
+			})
+			return
+		}
+		if a.sel < 0 || a.sel >= len(a.kb.Keys) {
+			ui.Column(c).Grow(1).Center().Gap(t.Space(3)).Padding(t.Space(4)).Children(func() {
+				ui.Text(c, "キーを選ぶと、ここで割り当てを変えられます").TextColor(t.TextMuted)
+				if !a.unlocked {
+					a.lockNote(c)
+					ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock)
+				}
 			})
 			return
 		}
@@ -852,6 +874,7 @@ func (a *app) keySummary(c *ui.Context, key protocol.Key) {
 	t := c.Theme()
 	code, _ := keyCode(a.kb, key, a.layer)
 	name, _ := capLabels(a.kb, key, a.layer)
+	name = oneLine(name)
 	if name == "" {
 		name = "No"
 	}
@@ -1174,12 +1197,17 @@ func capName(kb *protocol.Keyboard, code uint16) string {
 	return kb.Label(code)
 }
 
-// buttonName is capName for a control, where KC_NO needs a name.
+// buttonName is capName for a control, on one line, where KC_NO needs a
+// name. Custom names break lines for keycaps, as "Next\nBT".
 func buttonName(kb *protocol.Keyboard, code uint16) string {
 	if name := capName(kb, code); name != "" {
-		return name
+		return oneLine(name)
 	}
 	return "No"
+}
+
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 var capSymbols = map[uint16]string{

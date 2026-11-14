@@ -50,8 +50,8 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	if a.layer != 1 {
 		t.Fatalf("layer %d", a.layer)
 	}
-	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); ok {
-		t.Fatal("panel shows with no key chosen")
+	if !tt.HasText("キーを選ぶと、ここで割り当てを変えられます") {
+		t.Fatalf("no hint with no key chosen: %q", tt.Texts())
 	}
 	board, ok := tt.AccessByRole(ui.RoleGroup, "キー配列")
 	if !ok {
@@ -69,15 +69,16 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); !ok {
 		t.Fatal("keycode palette missing A")
 	}
-	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); !ok {
-		t.Fatal("panel missing for the chosen key")
+	// The panel holds its room whether or not a key is chosen.
+	if chosen, _ := tt.AccessByRole(ui.RoleGroup, "キー配列"); chosen.Bounds != board.Bounds {
+		t.Fatalf("choosing a key moved the board from %+v to %+v", board.Bounds, chosen.Bounds)
 	}
 	tt.Key(0, ui.KeyEscape)
 	if a.sel != -1 {
 		t.Fatalf("escape left %d chosen", a.sel)
 	}
-	if _, ok := tt.AccessByRole(ui.RoleGroup, "割り当て"); ok {
-		t.Fatal("panel stays after escape")
+	if !tt.HasText("キーを選ぶと、ここで割り当てを変えられます") {
+		t.Fatal("hint missing after escape")
 	}
 }
 
@@ -314,5 +315,23 @@ func TestLoadingDoesNotSayMissing(t *testing.T) {
 	}
 	if !tt.HasText("キーボードを読み込んでいます") {
 		t.Fatalf("texts %q", tt.Texts())
+	}
+}
+
+func TestCustomNamesReadOnOneLine(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Layers: 1,
+		Custom: []string{"Next\nBT"},
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if err := tt.Click("独自"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "Next BT"); !ok {
+		t.Fatalf("custom key not on one line: %q", tt.Texts())
 	}
 }
