@@ -654,8 +654,10 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	panel := ui.Row(c.Key("panel"))
 	if _, ok := a.editable(); ok {
-		// Fixed while editing, so switching slots does not move the board.
-		panel.Height(t.Rem(17))
+		// Fixed while editing, so switching slots does not move the board:
+		// the six rows of the basic board, under the kind switch.
+		u := pickUnit(c)
+		panel.Height(6*u + 5*pickSpacing(c) + t.Rem(2.25) + t.Space(10) + t.Space(1))
 	}
 	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
 		if a.unlocking {
@@ -818,7 +820,10 @@ func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button 
 		// panel without scrolling.
 		for _, group := range groups {
 			ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted).Width(t.Rem(5.5)).Shrink(0).Padding(t.Space(1), 0)
+				// As tall as a choice, so the heading centers on the first row.
+				ui.Column(c).Width(t.Rem(5.5)).Height(pickUnit(c)).Shrink(0).Justify(ui.Center).Children(func() {
+					ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+				})
 				ui.Row(c).Grow(1).Wrap().Gap(t.Space(1)).Children(func() {
 					for _, code := range group.codes {
 						short := ""
@@ -910,8 +915,10 @@ func (a *app) choiceButton(c *ui.Context, key, label, short string, chosen, off 
 	if short != "" {
 		b.Label(label).Tooltip(label)
 	}
-	// Choices keep their width in a wrapping row and line up as keycaps.
-	return b.Padding(c.Theme().Space(1), c.Theme().Space(2)).MinWidth(c.Theme().Rem(2.4)).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
+	// Choices keep their width in a wrapping row and are keycaps the size
+	// of the basic board's, so every page of choices reads at one scale.
+	u := pickUnit(c)
+	return b.Padding(0, c.Theme().Space(2)).MinWidth(u).Height(u).FontSize(u * 0.36).Shrink(0).Disabled(off || a.busy || a.unlocking || !a.unlocked).OnClick(pick)
 }
 
 type keyGroup struct {
@@ -1020,11 +1027,27 @@ var basicRows = [][]pickKey{
 	{{0xE0, 1.25}, {0xE2, 1.25}, {0xE3, 1.25}, {0x2C, 6.25}, {0xE7, 1.25}, {0xE6, 1.25}, {0x65, 1.25}, {0xE4, 1.25}, {room, 0.25}, {0x50, 1}, {0x51, 1}, {0x4F, 1}},
 }
 
-func (a *app) basicBoard(c *ui.Context) {
+// pickUnit is the 1u of the basic board in the panel. It grows with the
+// window, so the board and the choices keep their proportion, and stays
+// within the panel's width beside the slots.
+func pickUnit(c *ui.Context) float32 {
 	t := c.Theme()
-	// Six rows fit the panel under the kind switch.
-	unit := t.Rem(1.65)
-	spacing := t.Space(1) / 2
+	w, h := c.Size()
+	u := h * 0.05
+	// The panel's margins and padding, and the slot column.
+	if fit := (w - t.Space(16) - t.Rem(13)) / 18.5; fit < u {
+		u = fit
+	}
+	return max(t.Rem(1.75), min(u, t.Rem(3.25)))
+}
+
+func pickSpacing(c *ui.Context) float32 {
+	return c.Theme().Space(1) / 2
+}
+
+func (a *app) basicBoard(c *ui.Context) {
+	unit := pickUnit(c)
+	spacing := pickSpacing(c)
 	ui.Column(c).Gap(spacing).Role(ui.RoleGroup).Label("基本のキー").Children(func() {
 		for _, row := range basicRows {
 			ui.Row(c).Gap(spacing).Children(func() {
@@ -1038,9 +1061,11 @@ func (a *app) basicBoard(c *ui.Context) {
 					// A symbol reads at full size, a word smaller, as on keycaps.
 					switch n := utf8.RuneCountInString(buttonName(a.kb, key.code)); {
 					case n > 3:
-						b.FontSize(t.Rem(0.6))
+						b.FontSize(unit * 0.3)
 					case n > 1:
-						b.FontSize(t.Rem(0.7))
+						b.FontSize(unit * 0.34)
+					default:
+						b.FontSize(unit * 0.42)
 					}
 				}
 			})
