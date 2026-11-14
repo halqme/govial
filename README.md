@@ -17,7 +17,9 @@ macOS only, for now.
 - [x] Load the layout and keymap from a connected keyboard
 - [x] Change a key to a basic keycode, then read it back
 - [x] Lock and unlock
-- [ ] Assign layer keys, such as `MO` and `LT`
+- [x] Assign a tap and a hold, including `MO`, `LT`, and mod-tap
+- [x] Assign layer actions, macro keys, and the keyboard's custom keys
+- [x] Switch layout options
 - [ ] Edit macros
 - [ ] Edit combos
 - [ ] Control lighting
