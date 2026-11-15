@@ -1,0 +1,302 @@
+{
+  "@@locale": "en",
+  "keyboard": "Keyboard",
+  "@keyboard": {
+    "description": "The Keyboard menu, the keyboard chooser, and a keyboard with no name."
+  },
+  "reload": "Reload",
+  "@reload": {
+    "description": "The command that reads the keyboard again."
+  },
+  "refresh": "Refresh",
+  "@refresh": {
+    "description": "The button shown when no keyboard is connected."
+  },
+  "language": "Language",
+  "@language": {
+    "description": "The menu that chooses the language the app shows."
+  },
+  "languageSystem": "System",
+  "@languageSystem": {
+    "description": "The language menu item that follows the languages the user prefers."
+  },
+  "lockUnlock": "Unlock",
+  "@lockUnlock": {
+    "description": "The command that starts unlocking a locked keyboard."
+  },
+  "lockLock": "Lock",
+  "@lockLock": {
+    "description": "The command that locks an unlocked keyboard."
+  },
+  "lockUnlocking": "Unlocking",
+  "@lockUnlocking": {
+    "description": "The command label while the unlock keys are held."
+  },
+  "tipLocked": "Locked. Click to unlock.",
+  "@tipLocked": {
+    "description": "The tooltip of the lock button while the keyboard is locked."
+  },
+  "tipUnlocked": "Unlocked. Click to lock.",
+  "@tipUnlocked": {
+    "description": "The tooltip of the lock button while the keyboard is unlocked or unlocking."
+  },
+  "statusBusy": "Communicating",
+  "@statusBusy": {
+    "description": "The spinner in the title bar while the app talks to a connected keyboard."
+  },
+  "toolbarLabel": "Controls",
+  "@toolbarLabel": {
+    "description": "The accessible name of the title bar."
+  },
+  "emptyTitle": "No Vial keyboard found",
+  "@emptyTitle": {
+    "description": "The empty state when no keyboard is connected."
+  },
+  "loading": "Reading the keyboard",
+  "@loading": {
+    "description": "Shown while a keyboard is being looked for and read."
+  },
+  "unlockHold": "Hold the keys down",
+  "@unlockHold": {
+    "description": "The instruction during the unlock countdown."
+  },
+  "unlockKeys": "Unlock keys",
+  "@unlockKeys": {
+    "description": "Shown during unlock when the keyboard did not name the keys to hold."
+  },
+  "unlockProgress": "Unlock progress",
+  "@unlockProgress": {
+    "description": "The accessible name of the unlock progress bar."
+  },
+  "unlockRemain": "{count, plural, one {# left. To stop, unplug the keyboard and plug it back in.} other {# left. To stop, unplug the keyboard and plug it back in.}}",
+  "@unlockRemain": {
+    "description": "How many unlock steps remain, and how to cancel.",
+    "placeholders": {
+      "count": { "type": "int", "example": "12" }
+    }
+  },
+  "holdAnd": " and ",
+  "@holdAnd": {
+    "description": "Placed between the names of the keys to hold for unlock."
+  },
+  "layoutOption": "Layout",
+  "@layoutOption": {
+    "description": "A layout option the keyboard did not name."
+  },
+  "boardLabel": "Key layout",
+  "@boardLabel": {
+    "description": "The accessible name of the drawn keyboard."
+  },
+  "keyFallback": "Key",
+  "@keyFallback": {
+    "description": "A chosen key with no name, in the context menu."
+  },
+  "panelLabel": "Assignment",
+  "@panelLabel": {
+    "description": "The accessible name of the pane that assigns the chosen key."
+  },
+  "hintChooseKey": "Select a key to change its assignment",
+  "@hintChooseKey": {
+    "description": "The assignment pane when no key is selected."
+  },
+  "notInMatrix": "This key is not in the matrix",
+  "@notInMatrix": {
+    "description": "The assignment pane for a key the keymap cannot set."
+  },
+  "slotTap": "Tap",
+  "@slotTap": {
+    "description": "The slot for what a key does when tapped."
+  },
+  "slotHold": "Hold",
+  "@slotHold": {
+    "description": "The slot for what a key does while held."
+  },
+  "slotsLabel": "Action",
+  "@slotsLabel": {
+    "description": "The accessible name of the tap and hold slots."
+  },
+  "none": "None",
+  "@none": {
+    "description": "A tap or a hold with no key assigned."
+  },
+  "layerN": "Layer {layer}",
+  "@layerN": {
+    "description": "A layer named by its number, as a hold or in the key summary.",
+    "placeholders": {
+      "layer": { "type": "int", "example": "0" }
+    }
+  },
+  "rightPrefix": "R",
+  "@rightPrefix": {
+    "description": "The prefix before the symbol of a right-side modifier, as R⌘."
+  },
+  "groupLayer": "Layer",
+  "@groupLayer": {
+    "description": "The heading of the layer choices for a hold, and the accessible name of the layer switch."
+  },
+  "groupModifiers": "Modifiers",
+  "@groupModifiers": {
+    "description": "The heading of the modifier choices for a hold."
+  },
+  "noteHoldBasicOnly": "A hold can be added only to a basic key without modifiers",
+  "@noteHoldBasicOnly": {
+    "description": "Why a hold cannot be combined with the chosen tap, and the error when that write is refused."
+  },
+  "turnCounterclockwise": "Counterclockwise",
+  "@turnCounterclockwise": {
+    "description": "The direction of a knob turned counterclockwise."
+  },
+  "turnClockwise": "Clockwise",
+  "@turnClockwise": {
+    "description": "The direction of a knob turned clockwise."
+  },
+  "encoderSummary": "Knob {index} · {turn} · {code}",
+  "@encoderSummary": {
+    "description": "The selected knob: its number, the way it turns, and the keycode in hexadecimal.",
+    "placeholders": {
+      "index": { "type": "int", "example": "1" },
+      "turn": { "type": "String", "example": "Clockwise" },
+      "code": { "type": "String", "example": "0000" }
+    }
+  },
+  "keySummary": "Layer {layer} · {row},{col} · {code}",
+  "@keySummary": {
+    "description": "The selected key: its layer, its matrix position, and the keycode in hexadecimal.",
+    "placeholders": {
+      "layer": { "type": "int", "example": "0" },
+      "row": { "type": "int", "example": "0" },
+      "col": { "type": "int", "example": "1" },
+      "code": { "type": "String", "example": "0004" }
+    }
+  },
+  "lockNote": "The keyboard is locked. Click “{action}” and hold the keys shown to assign one.",
+  "@lockNote": {
+    "description": "Why the assignment pane offers no keys, naming the unlock command.",
+    "placeholders": {
+      "action": { "type": "String", "example": "Unlock" }
+    }
+  },
+  "kindBasic": "Basic",
+  "@kindBasic": {
+    "description": "The page of basic keys."
+  },
+  "kindOther": "Other",
+  "@kindOther": {
+    "description": "The page and the heading of keys that are not on the basic board."
+  },
+  "kindLayer": "Layer actions",
+  "@kindLayer": {
+    "description": "The page of keys that change the layer."
+  },
+  "kindMacro": "Macros",
+  "@kindMacro": {
+    "description": "The page and the heading of the keyboard's macro keys."
+  },
+  "kindCustom": "Custom",
+  "@kindCustom": {
+    "description": "The page and the heading of the keyboard's own keys."
+  },
+  "keyKind": "Key type",
+  "@keyKind": {
+    "description": "The accessible name of the control that switches which keys are offered."
+  },
+  "noteHoldLimitsTap": "While a hold is set, only basic keys can be chosen",
+  "@noteHoldLimitsTap": {
+    "description": "Shown on the other key pages while the chosen key has a hold."
+  },
+  "noteMacroAssignOnly": "Assignment only. What a macro does cannot be edited yet.",
+  "@noteMacroAssignOnly": {
+    "description": "Shown on the macro page."
+  },
+  "basicKeys": "Basic keys",
+  "@basicKeys": {
+    "description": "The accessible name of the basic key board."
+  },
+  "layerToggle": "Toggle",
+  "@layerToggle": {
+    "description": "The heading for keys that toggle a layer."
+  },
+  "layerTo": "Move",
+  "@layerTo": {
+    "description": "The heading for keys that move to a layer."
+  },
+  "layerTapToggle": "Tap toggle",
+  "@layerTapToggle": {
+    "description": "The heading for keys that toggle a layer when tapped."
+  },
+  "layerOneShot": "One shot",
+  "@layerOneShot": {
+    "description": "The heading for keys that turn a layer on for one key."
+  },
+  "layerDefault": "Default",
+  "@layerDefault": {
+    "description": "The heading for keys that set the default layer."
+  },
+  "groupJapanese": "Japanese",
+  "@groupJapanese": {
+    "description": "The heading for the Japanese keys."
+  },
+  "groupMedia": "Media",
+  "@groupMedia": {
+    "description": "The heading for the media keys."
+  },
+  "groupMouse": "Mouse",
+  "@groupMouse": {
+    "description": "The heading for the mouse buttons."
+  },
+  "groupWheel": "Wheel",
+  "@groupWheel": {
+    "description": "The heading for the scroll wheel."
+  },
+  "whileHeld": "Held",
+  "@whileHeld": {
+    "description": "Under a keycap whose only action is what it does while held."
+  },
+  "flashLocked": "Locked",
+  "@flashLocked": {
+    "description": "The notice after the keyboard locks."
+  },
+  "flashUnlocked": "Unlocked",
+  "@flashUnlocked": {
+    "description": "The notice after the keyboard unlocks."
+  },
+  "errLockFailed": "Could not lock",
+  "@errLockFailed": {
+    "description": "Shown when the keyboard stays unlocked after a lock command."
+  },
+  "errKept": "Could not write. The keyboard still has {name}.",
+  "@errKept": {
+    "description": "Shown when a write is refused and the keyboard keeps its key.",
+    "placeholders": {
+      "name": { "type": "String", "example": "A" }
+    }
+  },
+  "errNoAnswer": "The keyboard did not respond",
+  "@errNoAnswer": {
+    "description": "Shown when the keyboard does not answer."
+  },
+  "errDisconnected": "The keyboard is not connected",
+  "@errDisconnected": {
+    "description": "Shown when the keyboard is gone or the connection is closed."
+  },
+  "errOutside": "Cannot write to this key position",
+  "@errOutside": {
+    "description": "Shown when the position is outside the keymap."
+  },
+  "errWrite": "Failed to send to the keyboard",
+  "@errWrite": {
+    "description": "Shown when a report fails to send."
+  },
+  "errLockedAssign": "The keyboard is locked. Unlock it before assigning.",
+  "@errLockedAssign": {
+    "description": "Shown when an assignment is attempted while the keyboard is locked."
+  },
+  "deviceDuplicate": "{name} ({count})",
+  "@deviceDuplicate": {
+    "description": "A keyboard's name when another connected keyboard has the same one.",
+    "placeholders": {
+      "name": { "type": "String", "example": "Board" },
+      "count": { "type": "int", "example": "2" }
+    }
+  }
+}

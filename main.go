@@ -13,7 +13,15 @@ import (
 func main() {
 	a := newApp()
 	a.installMenus()
+	// Menu labels are set again from the view. The check marks name the
+	// language the app chose, which is only known on the main thread, so
+	// they are set once the app is ready and again when the language changes.
+	mygo.App.OnLocaleChanged(func(string) {
+		a.syncMenu()
+		a.syncLanguage()
+	})
 	mygo.App.WhenReady(func() {
+		a.syncLanguage()
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:         "Govial",
 			TitleBarStyle: mygo.TitleBarHiddenInset,

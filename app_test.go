@@ -4,10 +4,18 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 	"github.com/halqme/govial/hid"
 	"github.com/halqme/govial/protocol"
 )
+
+func init() {
+	// Catalogs follow the process language. Pin Japanese so these
+	// assertions do not change with the machine that runs them.
+	i18n.SetLocaleFunc(func() string { return "ja" })
+}
 
 func TestEmptyStateOffersRefresh(t *testing.T) {
 	a := newApp()
@@ -333,5 +341,67 @@ func TestCustomNamesReadOnOneLine(t *testing.T) {
 	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "Next BT"); !ok {
 		t.Fatalf("custom key not on one line: %q", tt.Texts())
+	}
+}
+
+func showLocale(t *testing.T, tag string) {
+	t.Helper()
+	i18n.SetLocaleFunc(func() string { return tag })
+	t.Cleanup(func() { i18n.SetLocaleFunc(func() string { return "ja" }) })
+}
+
+func TestEnglishShowsTheSourceCatalog(t *testing.T) {
+	showLocale(t, "en")
+	a := newApp()
+	tt := ui.NewTester(a.view, 900, 640)
+	if !tt.HasText("No Vial keyboard found") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "Refresh"); !ok {
+		t.Fatal("refresh button missing")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleToolbar, "Controls"); !ok {
+		t.Fatal("toolbar missing")
+	}
+}
+
+func TestFailureFollowsTheLanguage(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.finishLock(nil, protocol.Unlock{Open: true}, nil)
+	if a.banner() != "ロックできませんでした" {
+		t.Fatalf("ja %q", a.banner())
+	}
+	showLocale(t, "en")
+	if a.banner() != "Could not lock" {
+		t.Fatalf("en %q", a.banner())
+	}
+}
+
+func TestLanguageMenuFollowsTheLanguage(t *testing.T) {
+	a := newApp()
+	a.installMenus()
+	menu := mygo.App.Menu()
+	if menu == nil {
+		t.Fatal("menu missing")
+	}
+	label := func(id string) string {
+		t.Helper()
+		item := menu.ItemByID(id)
+		if item == nil {
+			t.Fatalf("%s missing", id)
+		}
+		return item.Label
+	}
+	if label("language") != "言語" || label("lang-system") != "システム" {
+		t.Fatalf("language %q system %q", label("language"), label("lang-system"))
+	}
+	if label("lang-en") != "English" || label("lang-ja") != "日本語" {
+		t.Fatalf("en %q ja %q", label("lang-en"), label("lang-ja"))
+	}
+	showLocale(t, "en")
+	a.syncMenu()
+	if label("language") != "Language" || label("lang-system") != "System" || label("keyboard") != "Keyboard" {
+		t.Fatalf("language %q system %q keyboard %q", label("language"), label("lang-system"), label("keyboard"))
 	}
 }

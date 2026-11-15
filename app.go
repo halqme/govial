@@ -10,10 +10,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/plugins/sfsymbols"
 	"github.com/egoist/mygo/ui"
 	"github.com/halqme/govial/hid"
+	"github.com/halqme/govial/locales"
 	"github.com/halqme/govial/protocol"
 )
 
@@ -51,17 +53,28 @@ type app struct {
 	hold        []protocol.KeyPos
 	// unit and inset are the keycap scale and offset of the last drawn
 	// board, so pointer hits match what is on screen.
-	unit       float32
-	inset      ui.Point
-	pick       int
-	slot       string
-	layout     []int
-	layoutKB   *protocol.Keyboard
-	reloadItem *mygo.MenuItem
-	lockItem   *mygo.MenuItem
-	reloadOn   bool
-	lockOn     bool
-	lockLabel  string
+	unit          float32
+	inset         ui.Point
+	pick          int
+	slot          string
+	layout        []int
+	layoutKB      *protocol.Keyboard
+	reloadItem    *mygo.MenuItem
+	lockItem      *mygo.MenuItem
+	keyboardItem  *mygo.MenuItem
+	languageItem  *mygo.MenuItem
+	systemItem    *mygo.MenuItem
+	langItems     map[string]*mygo.MenuItem
+	reloadOn      bool
+	lockOn        bool
+	lockLabel     string
+	reloadLabel   string
+	keyboardLabel string
+	languageLabel string
+	systemLabel   string
+	chosen        string
+	chosenKnown   bool
+	fault         fault
 }
 
 func newApp() *app {
@@ -79,9 +92,9 @@ func (a *app) view(c *ui.Context) {
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		a.toolbar(c)
 		// MyGo v0.9.0 has no banner. This notice stays while the failure does.
-		if a.err != "" {
+		if msg := a.banner(); msg != "" {
 			ui.Row(c).Margin(0, t.Space(4), t.Space(2), t.Space(4)).Padding(t.Space(2), t.Space(3)).Radius(t.Radius).Background(t.Danger.Mix(t.Background, 0.85)).Children(func() {
-				ui.Text(c, a.err).Role(ui.RoleAlert).TextColor(t.Danger)
+				ui.Text(c, msg).Role(ui.RoleAlert).TextColor(t.Danger)
 			})
 		}
 		switch {
@@ -102,21 +115,50 @@ func (a *app) installMenus() {
 	// that role reloads a page, and its shortcut would do nothing here.
 	a.reloadItem = &mygo.MenuItem{
 		ID:          "reload",
-		Label:       "再読み込み",
+		Label:       locales.Reload(),
 		Accelerator: "CmdOrCtrl+R",
 		Click:       func(*mygo.MenuItem, *mygo.Window) { a.refresh() },
 	}
 	a.lockItem = &mygo.MenuItem{
 		ID:          "lock",
-		Label:       "解除",
+		Label:       a.lockCommand(),
 		Accelerator: "CmdOrCtrl+Shift+U",
 		Disabled:    true,
 		Click:       func(*mygo.MenuItem, *mygo.Window) { a.toggleLock() },
 	}
+	a.keyboardItem = &mygo.MenuItem{
+		ID:      "keyboard",
+		Label:   locales.Keyboard(),
+		Submenu: []*mygo.MenuItem{a.reloadItem, mygo.Separator(), a.lockItem},
+	}
+	a.systemItem = &mygo.MenuItem{
+		ID:    "lang-system",
+		Label: locales.LanguageSystem(),
+		Type:  mygo.MenuItemRadio,
+		Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.SetLocale("") },
+	}
+	a.langItems = map[string]*mygo.MenuItem{}
+	langItems := []*mygo.MenuItem{a.systemItem}
+	for _, tag := range mygo.App.Languages() {
+		lang := tag
+		item := &mygo.MenuItem{
+			ID:    "lang-" + lang,
+			Label: i18n.Autonym(lang),
+			Type:  mygo.MenuItemRadio,
+			Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.SetLocale(lang) },
+		}
+		a.langItems[lang] = item
+		langItems = append(langItems, item)
+	}
+	a.languageItem = &mygo.MenuItem{
+		ID:      "language",
+		Label:   locales.Language(),
+		Submenu: langItems,
+	}
 	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
 		{Role: mygo.RoleEditMenu},
-		{Label: "キーボード", Submenu: []*mygo.MenuItem{a.reloadItem, mygo.Separator(), a.lockItem}},
+		a.keyboardItem,
 		{Role: mygo.RoleViewMenu, Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleResetZoom},
 			{Role: mygo.RoleZoomIn},
@@ -125,6 +167,7 @@ func (a *app) installMenus() {
 			{Role: mygo.RoleToggleFullScreen},
 		}},
 		{Role: mygo.RoleWindowMenu},
+		a.languageItem,
 		{Role: mygo.RoleHelp},
 	}))
 }
@@ -145,16 +188,16 @@ func (a *app) syncMenu() {
 	if a.reloadItem == nil || a.lockItem == nil {
 		return
 	}
+	a.setLabel(&a.reloadLabel, a.reloadItem, locales.Reload())
+	a.setLabel(&a.keyboardLabel, a.keyboardItem, locales.Keyboard())
+	a.setLabel(&a.languageLabel, a.languageItem, locales.Language())
+	a.setLabel(&a.systemLabel, a.systemItem, locales.LanguageSystem())
 	reloadOn := !a.busy
 	if reloadOn != a.reloadOn {
 		a.reloadOn = reloadOn
 		a.reloadItem.SetEnabled(reloadOn)
 	}
-	label := a.lockCommand()
-	if label != a.lockLabel {
-		a.lockLabel = label
-		a.lockItem.SetLabel(label)
-	}
+	a.setLabel(&a.lockLabel, a.lockItem, a.lockCommand())
 	lockOn := a.dev != nil && !a.busy
 	if lockOn != a.lockOn {
 		a.lockOn = lockOn
@@ -162,14 +205,41 @@ func (a *app) syncMenu() {
 	}
 }
 
+func (a *app) setLabel(cached *string, item *mygo.MenuItem, label string) {
+	if item == nil || label == *cached {
+		return
+	}
+	*cached = label
+	item.SetLabel(label)
+}
+
+// syncLanguage checks the language the user chose. The names of the
+// languages are their own, so only the menu's own words follow the language
+// the app shows.
+func (a *app) syncLanguage() {
+	if a.systemItem == nil {
+		return
+	}
+	chosen := mygo.App.ChosenLocale()
+	if a.chosenKnown && chosen == a.chosen {
+		return
+	}
+	a.chosenKnown = true
+	a.chosen = chosen
+	a.systemItem.SetChecked(chosen == "")
+	for tag, item := range a.langItems {
+		item.SetChecked(chosen == tag)
+	}
+}
+
 func (a *app) lockCommand() string {
 	switch {
 	case a.unlocking:
-		return "解除中"
+		return locales.LockUnlocking()
 	case a.unlocked:
-		return "ロック"
+		return locales.LockLock()
 	default:
-		return "解除"
+		return locales.LockUnlock()
 	}
 }
 
@@ -198,19 +268,19 @@ func (a *app) toolbar(c *ui.Context) {
 		ui.Spacer(c)
 		// With no board, searching shows the wait in the middle instead.
 		if a.busy && a.kb != nil {
-			ui.Spinner(c).Label("通信中")
+			ui.Spinner(c).Label(locales.StatusBusy())
 		}
 		if a.dev != nil {
 			a.lockButton(c)
 		}
-		iconButton(c, "reload", "arrow.clockwise", reloadIcon, "再読み込み").Disabled(a.busy).OnClick(a.refresh)
-	}).Label("操作").Height(max(bar.Height, t.Rem(3.25))).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow()
+		iconButton(c, "reload", "arrow.clockwise", reloadIcon, locales.Reload()).Disabled(a.busy).OnClick(a.refresh)
+	}).Label(locales.ToolbarLabel()).Height(max(bar.Height, t.Rem(3.25))).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow()
 }
 
 func (a *app) lockButton(c *ui.Context) {
-	symbol, icon, tip := "lock.fill", lockIcon, "ロック中。押すと解除します"
+	symbol, icon, tip := "lock.fill", lockIcon, locales.TipLocked()
 	if a.unlocked || a.unlocking {
-		symbol, icon, tip = "lock.open.fill", unlockIcon, "解除中。押すとロックします"
+		symbol, icon, tip = "lock.open.fill", unlockIcon, locales.TipUnlocked()
 	}
 	iconButton(c, "lock", symbol, icon, a.lockCommand()).Tooltip(tip).Disabled(a.busy).OnClick(a.toggleLock)
 }
@@ -238,7 +308,7 @@ func (a *app) deviceSelect(c *ui.Context) {
 			break
 		}
 	}
-	if ui.Select(c, &a.device, names).Label("キーボード").Changed() {
+	if ui.Select(c, &a.device, names).Label(locales.Keyboard()).Changed() {
 		for i, name := range names {
 			if name == a.device && a.infos[i].Entry != a.entry {
 				a.entry = a.infos[i].Entry
@@ -272,11 +342,11 @@ func deviceNames(infos []hid.Info) []string {
 	for i, info := range infos {
 		name := strings.TrimSpace(info.Name)
 		if name == "" {
-			name = "キーボード"
+			name = locales.Keyboard()
 		}
 		seen[name]++
 		if seen[name] > 1 {
-			name = fmt.Sprintf("%s (%d)", name, seen[name])
+			name = locales.DeviceDuplicate(name, seen[name])
 		}
 		names[i] = name
 	}
@@ -288,8 +358,8 @@ func (a *app) empty(c *ui.Context) {
 	ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Children(func() {
 		icon := sfsymbols.Symbol(c, "keyboard").Size(t.Rem(2.4)).Color(t.TextMuted).Fallback(keyboardIcon)
 		icon.Role(ui.RoleNone)
-		ui.Text(c, "Vial のキーボードが見つかりません")
-		ui.PrimaryButton(c, "更新").Disabled(a.busy).OnClick(a.refresh)
+		ui.Text(c, locales.EmptyTitle())
+		ui.PrimaryButton(c, locales.Refresh()).Disabled(a.busy).OnClick(a.refresh)
 	})
 }
 
@@ -298,8 +368,8 @@ func (a *app) empty(c *ui.Context) {
 func (a *app) searching(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Children(func() {
-		ui.Spinner(c).Label("キーボードを読み込んでいます")
-		ui.Text(c, "キーボードを読み込んでいます").TextColor(t.TextMuted)
+		ui.Spinner(c).Label(locales.Loading())
+		ui.Text(c, locales.Loading()).TextColor(t.TextMuted)
 	})
 }
 
@@ -312,10 +382,10 @@ func (a *app) unlockPane(c *ui.Context) {
 
 func (a *app) unlockStatus(c *ui.Context) {
 	t := c.Theme()
-	ui.Text(c, "キーを押し続けてください").Bold()
+	ui.Text(c, locales.UnlockHold()).Bold()
 	ui.Text(c, a.holdText()).FontSize(t.Rem(1.5)).Bold()
-	ui.Progress(c, a.unlockDone()).Label("解除の進行")
-	ui.Text(c, fmt.Sprintf("残り %d。やめるにはキーボードを抜き差しします", a.remain)).TextColor(t.TextMuted)
+	ui.Progress(c, a.unlockDone()).Label(locales.UnlockProgress())
+	ui.Text(c, locales.UnlockRemain(a.remain)).TextColor(t.TextMuted)
 }
 
 func (a *app) unlockDone() float64 {
@@ -341,7 +411,7 @@ func (a *app) layers(c *ui.Context) {
 	for i := range labels {
 		labels[i] = strconv.Itoa(i)
 	}
-	ui.Segmented(c, &a.layer, labels...).Label("レイヤー")
+	ui.Segmented(c, &a.layer, labels...).Label(locales.GroupLayer())
 }
 
 // workspace is the board over the whole window, with the panel for the
@@ -371,7 +441,7 @@ func (a *app) layoutOptions(c *ui.Context) {
 			}
 			name := opt.Name
 			if name == "" {
-				name = "配列"
+				name = locales.LayoutOption()
 			}
 			if !ui.Segmented(c, &a.layout[i], opt.Choices...).Label(name).Changed() {
 				continue
@@ -416,7 +486,7 @@ func (a *app) board(c *ui.Context) {
 	const pad = float32(18)
 	// Painted, not a grid of buttons: keycaps rotate and overlap,
 	// which no collection widget lays out. MyGo v0.9.0.
-	box := ui.Box(c).Grow(1).Focusable().Role(ui.RoleGroup).Label("キー配列")
+	box := ui.Box(c).Grow(1).Focusable().Role(ui.RoleGroup).Label(locales.BoardLabel())
 	switch {
 	case box.Shortcut(0, ui.KeyLeft):
 		a.moveSelection(-1, 0)
@@ -451,12 +521,12 @@ func (a *app) board(c *ui.Context) {
 		if a.sel >= 0 && a.sel < len(keys) {
 			name, _ := capLabels(a.kb, keys[a.sel], a.layer)
 			if name == "" {
-				name = "キー"
+				name = locales.KeyFallback()
 			}
 			m.Item(name).Disabled(true)
 			m.Separator()
 		}
-		if m.Item("再読み込み").Disabled(a.busy).Chosen() {
+		if m.Item(locales.Reload()).Disabled(a.busy).Chosen() {
 			a.refresh()
 		}
 		if a.dev != nil && m.Item(a.lockCommand()).Disabled(a.busy).Chosen() {
@@ -635,7 +705,7 @@ func (a *app) drawKey(c *ui.Context, p *ui.Painter, r ui.Rect, unit float32, i i
 
 func (a *app) holdText() string {
 	if len(a.hold) == 0 {
-		return "解除キー"
+		return locales.UnlockKeys()
 	}
 	names := make([]string, 0, len(a.hold))
 	for _, pos := range a.hold {
@@ -648,7 +718,7 @@ func (a *app) holdText() string {
 		}
 		names = append(names, fmt.Sprintf("%d,%d", pos.Row, pos.Col))
 	}
-	return strings.Join(names, " と ")
+	return strings.Join(names, locales.HoldAnd())
 }
 
 func (a *app) holding(key protocol.Key) bool {
@@ -671,7 +741,7 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	u := pickUnit(c)
 	panel := ui.Row(c.Key("panel")).Height(6*u + 5*pickSpacing(c) + t.Rem(2.25) + t.Space(10) + t.Space(1))
-	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).Border(1, t.Border).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label("割り当て").Children(func() {
+	panel.Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).Border(1, t.Border).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label(locales.PanelLabel()).Children(func() {
 		if a.unlocking {
 			ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Padding(t.Space(4)).Children(func() {
 				a.unlockStatus(c)
@@ -680,10 +750,10 @@ func (a *app) panel(c *ui.Context) {
 		}
 		if a.sel < 0 || a.sel >= len(a.kb.Keys) {
 			ui.Column(c).Grow(1).Center().Gap(t.Space(3)).Padding(t.Space(4)).Children(func() {
-				ui.Text(c, "キーを選ぶと、ここで割り当てを変えられます").TextColor(t.TextMuted)
+				ui.Text(c, locales.HintChooseKey()).TextColor(t.TextMuted)
 				if !a.unlocked {
 					a.lockNote(c)
-					ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock)
+					ui.PrimaryButton(c.Key("unlock"), locales.LockUnlock()).Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock)
 				}
 			})
 			return
@@ -698,11 +768,11 @@ func (a *app) panel(c *ui.Context) {
 		ui.Column(c).Grow(1).Children(func() {
 			switch {
 			case !key.HasMatrix && !key.Encoder:
-				ui.Text(c, "このキーはマトリクスにありません").TextColor(t.TextMuted).Margin(t.Space(4))
+				ui.Text(c, locales.NotInMatrix()).TextColor(t.TextMuted).Margin(t.Space(4))
 			case !a.unlocked:
 				ui.Column(c).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
 					a.lockNote(c)
-					ui.PrimaryButton(c.Key("unlock"), "解除").Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock).AlignSelf(ui.Start)
+					ui.PrimaryButton(c.Key("unlock"), locales.LockUnlock()).Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock).AlignSelf(ui.Start)
 				})
 			case a.slotOf(key) == slotHold:
 				a.holdPicker(c)
@@ -743,13 +813,13 @@ func (a *app) slots(c *ui.Context, key protocol.Key) {
 	}
 	tap, hold := a.tapHold()
 	ui.Sidebar(c, &a.slot, func() {
-		ui.SidebarItem(c, slotTap, nil, "タップ").Children(func() {
+		ui.SidebarItem(c, slotTap, nil, locales.SlotTap()).Children(func() {
 			ui.Badge(c, a.tapLabel(tap))
 		})
-		ui.SidebarItem(c, slotHold, nil, "長押し").Children(func() {
+		ui.SidebarItem(c, slotHold, nil, locales.SlotHold()).Children(func() {
 			ui.Badge(c, holdLabel(hold))
 		})
-	}).Label("動作").Background(ui.RGBA(0, 0, 0, 0))
+	}).Label(locales.SlotsLabel()).Background(ui.RGBA(0, 0, 0, 0))
 }
 
 // tapHold is the selected key's code read as a tap and a hold.
@@ -763,7 +833,7 @@ func (a *app) tapHold() (tap, hold uint16) {
 
 func (a *app) tapLabel(tap uint16) string {
 	if tap == 0 {
-		return "なし"
+		return locales.None()
 	}
 	return buttonName(a.kb, tap)
 }
@@ -771,14 +841,14 @@ func (a *app) tapLabel(tap uint16) string {
 func holdLabel(hold uint16) string {
 	switch {
 	case hold == 0:
-		return "なし"
+		return locales.None()
 	case hold >= 0x5220 && hold <= 0x523F:
-		return fmt.Sprintf("レイヤー %d", hold-0x5220)
+		return locales.LayerN(int(hold - 0x5220))
 	}
 	mods := byte(hold >> 8)
 	var b strings.Builder
 	if mods&0x10 != 0 {
-		b.WriteString("右")
+		b.WriteString(locales.RightPrefix())
 	}
 	for _, m := range []struct {
 		bit  byte
@@ -813,12 +883,12 @@ func (a *app) holdPicker(c *ui.Context) {
 	}
 	groups := []keyGroup{
 		{codes: []uint16{0}},
-		{name: "レイヤー", codes: layerHolds, short: layerNumber},
-		{name: "修飾", codes: modHolds},
+		{name: locales.GroupLayer(), codes: layerHolds, short: layerNumber},
+		{name: locales.GroupModifiers(), codes: modHolds},
 	}
 	var note string
 	if !open {
-		note = "長押しを付けられるのは、修飾のない基本キーだけです"
+		note = locales.NoteHoldBasicOnly()
 	}
 	choices(c, note, nil, groups, func(code uint16, short string) {
 		a.choiceButton(c, fmt.Sprintf("hold-%04x", code), holdLabel(code), short, code == hold, code != 0 && !open, func() {
@@ -864,7 +934,7 @@ func choices(c *ui.Context, note string, lead func(), groups []keyGroup, button 
 func (a *app) assignTapHold(tap, hold uint16) {
 	code, ok := protocol.JoinTapHold(tap, hold)
 	if !ok {
-		a.err = "長押しを付けられるのは、修飾のない基本キーだけです"
+		a.setFault(fault{kind: faultHoldBasic})
 		return
 	}
 	a.assign(code)
@@ -880,21 +950,21 @@ func (a *app) keySummary(c *ui.Context, key protocol.Key) {
 	}
 	ui.Text(c, name).FontSize(t.Rem(1.6)).Bold()
 	if key.Encoder {
-		turn := "反時計回り"
+		turn := locales.TurnCounterclockwise()
 		if key.EncDir == 1 {
-			turn = "時計回り"
+			turn = locales.TurnClockwise()
 		}
-		ui.Text(c, fmt.Sprintf("ノブ %d · %s · %04X", key.EncoderIndex+1, turn, code)).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
+		ui.Text(c, locales.EncoderSummary(key.EncoderIndex+1, turn, fmt.Sprintf("%04X", code))).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
 		return
 	}
-	ui.Text(c, fmt.Sprintf("レイヤー %d · %d,%d · %04X", a.layer, key.Row, key.Col, code)).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
+	ui.Text(c, locales.KeySummary(a.layer, key.Row, key.Col, fmt.Sprintf("%04X", code))).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
 }
 
 func (a *app) lockNote(c *ui.Context) {
 	if a.unlocked || a.unlocking {
 		return
 	}
-	ui.Text(c, "ロック中です。割り当てるには「解除」を押して、表示されたキーを押し続けてください").TextColor(c.Theme().TextMuted)
+	ui.Text(c, locales.LockNote(locales.LockUnlock())).TextColor(c.Theme().TextMuted)
 }
 
 func (a *app) current() uint16 {
@@ -981,15 +1051,15 @@ func (a *app) keyKinds() []keyKind {
 func kindLabel(kind keyKind) string {
 	switch kind {
 	case kindOther:
-		return "その他"
+		return locales.KindOther()
 	case kindLayer:
-		return "レイヤー操作"
+		return locales.KindLayer()
 	case kindMacro:
-		return "マクロ"
+		return locales.KindMacro()
 	case kindCustom:
-		return "独自"
+		return locales.KindCustom()
 	default:
-		return "基本"
+		return locales.KindBasic()
 	}
 }
 
@@ -1004,7 +1074,7 @@ func (a *app) picker(c *ui.Context) {
 		labels[i] = kindLabel(kind)
 	}
 	// Segmented switches which keys are offered. Tabs would be the same pages with more chrome.
-	ui.Segmented(c, &a.pick, labels...).Label("キーの種類").AlignSelf(ui.Start).Margin(t.Space(4), t.Space(4), 0, t.Space(4))
+	ui.Segmented(c, &a.pick, labels...).Label(locales.KeyKind()).AlignSelf(ui.Start).Margin(t.Space(4), t.Space(4), 0, t.Space(4))
 	var groups []keyGroup
 	switch kinds[a.pick] {
 	case kindLayer:
@@ -1019,9 +1089,9 @@ func (a *app) picker(c *ui.Context) {
 	var note string
 	switch _, hold := a.tapHold(); {
 	case hold != 0 && kinds[a.pick] != kindBasic && kinds[a.pick] != kindOther:
-		note = "長押しがあるあいだは、基本キーだけを選べます"
+		note = locales.NoteHoldLimitsTap()
 	case kinds[a.pick] == kindMacro:
-		note = "割り当てだけです。マクロの中身はまだ編集できません"
+		note = locales.NoteMacroAssignOnly()
 	}
 	var lead func()
 	if kinds[a.pick] == kindBasic {
@@ -1071,7 +1141,7 @@ func pickSpacing(c *ui.Context) float32 {
 func (a *app) basicBoard(c *ui.Context) {
 	unit := pickUnit(c)
 	spacing := pickSpacing(c)
-	ui.Column(c).Gap(spacing).Role(ui.RoleGroup).Label("基本のキー").Children(func() {
+	ui.Column(c).Gap(spacing).Role(ui.RoleGroup).Label(locales.BasicKeys()).Children(func() {
 		for _, row := range basicRows {
 			ui.Row(c).Gap(spacing).Children(func() {
 				for _, key := range row {
@@ -1110,11 +1180,11 @@ func layerPalette(kb *protocol.Keyboard) []keyGroup {
 		make  func(int) (uint16, bool)
 	}
 	ops := []op{
-		{"切り替え", 32, protocol.ToggleLayer},
-		{"移動", 32, protocol.ToLayer},
-		{"タップ切替", 32, protocol.TapToggleLayer},
-		{"一度だけ", 32, protocol.OneShotLayer},
-		{"既定", 32, protocol.DefaultLayer},
+		{locales.LayerToggle(), 32, protocol.ToggleLayer},
+		{locales.LayerTo(), 32, protocol.ToLayer},
+		{locales.LayerTapToggle(), 32, protocol.TapToggleLayer},
+		{locales.LayerOneShot(), 32, protocol.OneShotLayer},
+		{locales.LayerDefault(), 32, protocol.DefaultLayer},
 	}
 	groups := make([]keyGroup, 0, len(ops))
 	for _, item := range ops {
@@ -1158,7 +1228,7 @@ func macroPalette(kb *protocol.Keyboard) []keyGroup {
 	if len(codes) == 0 {
 		return nil
 	}
-	return []keyGroup{{name: "マクロ", codes: codes}}
+	return []keyGroup{{name: locales.KindMacro(), codes: codes}}
 }
 
 func customPalette(kb *protocol.Keyboard) []keyGroup {
@@ -1173,17 +1243,17 @@ func customPalette(kb *protocol.Keyboard) []keyGroup {
 	for i := range codes {
 		codes[i] = uint16(0x7E00 + i)
 	}
-	return []keyGroup{{name: "独自", codes: codes}}
+	return []keyGroup{{name: locales.KindCustom(), codes: codes}}
 }
 
 // palette is the basic keys the basic board does not hold.
 func palette() []keyGroup {
 	return []keyGroup{
-		{name: "日本語", codes: []uint16{0x0091, 0x0090, 0x0089, 0x0087, 0x008B, 0x008A}},
-		{name: "メディア", codes: []uint16{0x00A8, 0x00AA, 0x00A9, 0x00AC, 0x00AE, 0x00AB, 0x00BE, 0x00BD}},
-		{name: "マウス", codes: []uint16{0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3}},
-		{name: "ホイール", codes: []uint16{0x00D9, 0x00DA, 0x00DB, 0x00DC}},
-		{name: "その他", codes: []uint16{0x0000, 0x0001, 0x0046, 0x0047, 0x0048}},
+		{name: locales.GroupJapanese(), codes: []uint16{0x0091, 0x0090, 0x0089, 0x0087, 0x008B, 0x008A}},
+		{name: locales.GroupMedia(), codes: []uint16{0x00A8, 0x00AA, 0x00A9, 0x00AC, 0x00AE, 0x00AB, 0x00BE, 0x00BD}},
+		{name: locales.GroupMouse(), codes: []uint16{0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3}},
+		{name: locales.GroupWheel(), codes: []uint16{0x00D9, 0x00DA, 0x00DB, 0x00DC}},
+		{name: locales.KindOther(), codes: []uint16{0x0000, 0x0001, 0x0046, 0x0047, 0x0048}},
 	}
 }
 
@@ -1191,6 +1261,9 @@ func palette() []keyGroup {
 // keyboard's own name for its custom keys, the Mac's symbol where a key has
 // one, and QMK's short name otherwise. KC_NO reads as nothing.
 func capName(kb *protocol.Keyboard, code uint16) string {
+	if sym, ok := rightCaps[code]; ok {
+		return locales.RightPrefix() + sym
+	}
 	if sym, ok := capSymbols[code]; ok {
 		return sym
 	}
@@ -1210,6 +1283,14 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// rightCaps are the right-side modifiers. The prefix is the language's, so
+// Japanese reads 右⌘ and English reads R⌘.
+var rightCaps = map[uint16]string{
+	0x00E4: "⌃",
+	0x00E5: "⇧",
+	0x00E6: "⌥",
+	0x00E7: "⌘",
+}
 var capSymbols = map[uint16]string{
 	0x0028: "⏎",
 	0x002A: "⌫",
@@ -1227,10 +1308,6 @@ var capSymbols = map[uint16]string{
 	0x00E1: "⇧",
 	0x00E2: "⌥",
 	0x00E3: "⌘",
-	0x00E4: "右⌃",
-	0x00E5: "右⇧",
-	0x00E6: "右⌥",
-	0x00E7: "右⌘",
 	0x0087: "ろ",
 	0x0089: "¥",
 	0x008A: "変換",
@@ -1274,7 +1351,7 @@ func capLabels(kb *protocol.Keyboard, key protocol.Key, layer int) (main, sub st
 	case hold == 0:
 		return capName(kb, tap), ""
 	case tap == 0:
-		return shortHold(hold), "押す間"
+		return shortHold(hold), locales.WhileHeld()
 	default:
 		return capName(kb, tap), shortHold(hold)
 	}
@@ -1321,7 +1398,7 @@ func (a *app) refresh() {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	entry := a.entry
@@ -1351,7 +1428,7 @@ func (a *app) open(info hid.Info) {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	go func() {
@@ -1411,7 +1488,7 @@ func (a *app) finish(gen int, infos []hid.Info, dev *hid.Device, kb *protocol.Ke
 		}
 		a.busy = false
 		if err != nil {
-			a.err = explain(err)
+			a.setFault(explain(err))
 			a.unlocking = false
 			return
 		}
@@ -1432,7 +1509,7 @@ func (a *app) saveLayout(prev []int) {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	dev := a.dev
@@ -1453,7 +1530,7 @@ func (a *app) saveLayout(prev []int) {
 					kb.SetChoice(i, choice)
 				}
 				a.layout = kb.Choices()
-				a.err = explain(err)
+				a.setFault(explain(err))
 			}
 		})
 	}()
@@ -1464,7 +1541,7 @@ func (a *app) assign(code uint16) {
 		return
 	}
 	if !a.unlocked {
-		a.err = "ロック中です。解除してから割り当ててください"
+		a.setFault(fault{kind: faultLockedAssign})
 		return
 	}
 	if a.dev == nil {
@@ -1479,7 +1556,7 @@ func (a *app) assign(code uint16) {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	dev := a.dev
@@ -1499,7 +1576,7 @@ func (a *app) assign(code uint16) {
 				a.kb.Store(layer, row, col, got)
 			}
 			if err != nil {
-				a.err = explain(err)
+				a.setFault(explain(err))
 			}
 		})
 	}()
@@ -1507,7 +1584,7 @@ func (a *app) assign(code uint16) {
 
 func (a *app) assignEncoder(key protocol.Key, code uint16) {
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	dev := a.dev
@@ -1527,7 +1604,7 @@ func (a *app) assignEncoder(key protocol.Key, code uint16) {
 				a.kb.StoreEncoder(layer, index, dir, got)
 			}
 			if err != nil {
-				a.err = explain(err)
+				a.setFault(explain(err))
 			}
 		})
 	}()
@@ -1538,7 +1615,7 @@ func (a *app) beginUnlock() {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	dev := a.dev
@@ -1553,7 +1630,7 @@ func (a *app) beginUnlock() {
 			}
 			if err != nil {
 				a.busy = false
-				a.err = explain(err)
+				a.setFault(explain(err))
 				return
 			}
 			a.unlocking = true
@@ -1568,7 +1645,7 @@ func (a *app) lock() {
 		return
 	}
 	a.busy = true
-	a.err = ""
+	a.clearFault()
 	a.gen++
 	gen := a.gen
 	dev := a.dev
@@ -1600,25 +1677,25 @@ func (a *app) finishLock(cmdErr error, status protocol.Unlock, statusErr error) 
 			a.hold = status.Keys
 		}
 		if !status.Open && !status.Pending {
-			a.err = ""
-			a.flash = "ロックしました"
+			a.clearFault()
+			a.flash = locales.FlashLocked()
 			return
 		}
 		if cmdErr != nil {
-			a.err = explain(cmdErr)
+			a.setFault(explain(cmdErr))
 			return
 		}
-		a.err = "ロックできませんでした"
+		a.setFault(fault{kind: faultLockFailed})
 		return
 	}
 	if cmdErr != nil {
-		a.err = explain(cmdErr)
+		a.setFault(explain(cmdErr))
 		return
 	}
 	a.unlocked = false
 	a.unlocking = false
-	a.err = ""
-	a.flash = "ロックしました"
+	a.clearFault()
+	a.flash = locales.FlashLocked()
 }
 
 func (a *app) schedulePoll(gen int) {
@@ -1634,7 +1711,7 @@ func (a *app) schedulePoll(gen int) {
 				return
 			}
 			if err != nil {
-				a.err = explain(err)
+				a.setFault(explain(err))
 				a.busy = false
 				a.unlocking = false
 				return
@@ -1647,8 +1724,8 @@ func (a *app) schedulePoll(gen int) {
 			a.unlocked = true
 			a.unlocking = false
 			a.busy = false
-			a.err = ""
-			a.flash = "解除しました"
+			a.clearFault()
+			a.flash = locales.FlashUnlocked()
 			if a.kb == nil {
 				a.refresh()
 			}
@@ -1656,9 +1733,74 @@ func (a *app) schedulePoll(gen int) {
 	}()
 }
 
-func explain(err error) string {
-	if err == nil {
+type faultKind int
+
+const (
+	faultNone faultKind = iota
+	faultRaw
+	faultKept
+	faultNoAnswer
+	faultDisconnected
+	faultOutside
+	faultWrite
+	faultLockedAssign
+	faultHoldBasic
+	faultLockFailed
+)
+
+// fault is why the banner is showing, so a language change can say it again.
+type fault struct {
+	kind faultKind
+	arg  string
+}
+
+func (f fault) text() string {
+	switch f.kind {
+	case faultRaw:
+		return f.arg
+	case faultKept:
+		return locales.ErrKept(f.arg)
+	case faultNoAnswer:
+		return locales.ErrNoAnswer()
+	case faultDisconnected:
+		return locales.ErrDisconnected()
+	case faultOutside:
+		return locales.ErrOutside()
+	case faultWrite:
+		return locales.ErrWrite()
+	case faultLockedAssign:
+		return locales.ErrLockedAssign()
+	case faultHoldBasic:
+		return locales.NoteHoldBasicOnly()
+	case faultLockFailed:
+		return locales.ErrLockFailed()
+	default:
 		return ""
+	}
+}
+
+func (a *app) setFault(f fault) {
+	a.fault = f
+	a.err = f.text()
+}
+
+func (a *app) clearFault() {
+	a.fault = fault{}
+	a.err = ""
+}
+
+// banner is the failure on screen. A known failure follows the language;
+// a message set from outside, as a test does, is shown as it is.
+func (a *app) banner() string {
+	if a.fault.kind != faultNone {
+		return a.fault.text()
+	}
+	return a.err
+}
+
+func explain(err error) fault {
+	if err == nil {
+		return fault{}
 	}
 	var kept *protocol.Kept
 	if errors.As(err, &kept) {
@@ -1666,19 +1808,19 @@ func explain(err error) string {
 		if name == "" {
 			name = "No"
 		}
-		return fmt.Sprintf("書き込めませんでした。キーボードは %s のままです", name)
+		return fault{kind: faultKept, arg: name}
 	}
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "did not answer"):
-		return "キーボードが応答しませんでした"
+		return fault{kind: faultNoAnswer}
 	case strings.Contains(msg, "not connected"), strings.Contains(msg, "is closed"):
-		return "キーボードが接続されていません"
+		return fault{kind: faultDisconnected}
 	case strings.Contains(msg, "outside the keymap"):
-		return "このキーの位置には書き込めません"
+		return fault{kind: faultOutside}
 	case strings.Contains(msg, "write report"):
-		return "キーボードへの送信に失敗しました"
+		return fault{kind: faultWrite}
 	default:
-		return msg
+		return fault{kind: faultRaw, arg: msg}
 	}
 }

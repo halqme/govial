@@ -10,7 +10,7 @@ Requires Go 1.27.3 or later.
 go tool mygo dev
 ```
 
-macOS only, for now.
+macOS only, for now. The language follows the system. The Language menu chooses another, or the system again.
 
 ## Roadmap
 
