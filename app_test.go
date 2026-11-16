@@ -157,9 +157,6 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 	if err := tt.Click("マクロ"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("まだ編集できません") {
-		t.Fatal("macro note missing")
-	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "M0"); !ok {
 		t.Fatal("M0 missing")
 	}
@@ -403,5 +400,164 @@ func TestLanguageMenuFollowsTheLanguage(t *testing.T) {
 	a.syncMenu()
 	if label("language") != "Language" || label("lang-system") != "System" || label("keyboard") != "Keyboard" {
 		t.Fatalf("language %q system %q keyboard %q", label("language"), label("lang-system"), label("keyboard"))
+	}
+}
+
+func TestMacroScreenEditsTheChosenSlot(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Layers: 1, Macros: 2, VialProtocol: 6, Keys: []protocol.Key{{W: 1, H: 1}}}
+	a.macrosOn = true
+	a.macroSlotID = "0"
+	a.macroAct = 0
+	a.macros = []protocol.Macro{
+		{{Kind: protocol.ActionText, Text: "Hi"}},
+		{{Kind: protocol.ActionTap, Keys: []uint16{0x04}}},
+	}
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "書き込む"); !ok {
+		t.Fatal("save missing")
+	}
+	field, ok := tt.AccessByRole(ui.RoleTextField, "文字")
+	if !ok || field.Value != "Hi" {
+		t.Fatalf("text field %+v", field)
+	}
+	tt.ClickAt(field.Bounds.X+field.Bounds.W/2, field.Bounds.Y+field.Bounds.H/2)
+	tt.Type("!")
+	if a.macros[0][0].Text != "Hi!" {
+		t.Fatalf("text %q", a.macros[0][0].Text)
+	}
+	if err := tt.Click("M1"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("A") {
+		t.Fatalf("other slot %q", tt.Texts())
+	}
+	if a.macroSlotID != "1" || a.macroAct != -1 {
+		t.Fatalf("slot %s act %d", a.macroSlotID, a.macroAct)
+	}
+	if err := tt.Click("追加"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("タップ"); err != nil {
+		t.Fatalf("menu %v items %q", err, tt.Menu())
+	}
+	if got := a.macros[1]; len(got) != 2 || got[1].Kind != protocol.ActionTap || got[1].Keys[0] != 0x04 {
+		t.Fatalf("added %#v", got)
+	}
+	if err := tt.Click("削除"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.macros[1]) != 1 {
+		t.Fatalf("removed %#v", a.macros[1])
+	}
+	if err := tt.Click("閉じる"); err != nil {
+		t.Fatal(err)
+	}
+	if a.macrosOn || !tt.HasText("キーを選んでください") {
+		t.Fatal("close did not return to the board")
+	}
+}
+
+func TestLockedMacroScreenDoesNotWrite(t *testing.T) {
+	a := newApp()
+	a.kb = &protocol.Keyboard{Layers: 1, Macros: 1, VialProtocol: 6}
+	a.macrosOn = true
+	a.macroSlotID = "0"
+	a.macros = []protocol.Macro{{{Kind: protocol.ActionText, Text: "Hi"}}}
+	tt := ui.NewTester(a.view, 1000, 700)
+	save, ok := tt.AccessByRole(ui.RoleButton, "書き込む")
+	if !ok || !save.Disabled {
+		t.Fatalf("save %+v", save)
+	}
+	add, ok := tt.AccessByRole(ui.RoleMenuButton, "追加")
+	if !ok || !add.Disabled {
+		t.Fatalf("add %+v", add)
+	}
+	if !tt.HasText("ロック中") {
+		t.Fatal("lock note missing")
+	}
+	a.saveMacros()
+	if a.busy || a.banner() != "ロック中です" {
+		t.Fatalf("busy %v banner %q", a.busy, a.banner())
+	}
+	a.unlocked = true
+	a.macros[0][0].Text = "あ"
+	a.saveMacros()
+	if a.busy || a.banner() != "キーボードが送れる文字だけ使えます" {
+		t.Fatalf("busy %v banner %q", a.busy, a.banner())
+	}
+}
+
+func TestOldMacroFormatHasNoWait(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Macros: 1, VialProtocol: 1}
+	a.macrosOn = true
+	a.macroSlotID = "0"
+	a.macros = []protocol.Macro{nil}
+	tt := ui.NewTester(a.view, 1000, 700)
+	if err := tt.Click("追加"); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range tt.Menu() {
+		if item == "待ち" {
+			t.Fatal("old format offered a wait")
+		}
+	}
+	a.macros[0] = append(a.macros[0], protocol.Action{Kind: protocol.ActionDelay, Delay: 100})
+	a.saveMacros()
+	if a.busy || a.banner() != "この待ち時間は使えません" {
+		t.Fatalf("busy %v banner %q", a.busy, a.banner())
+	}
+}
+
+func TestMacroFitErrorNamesTheBytes(t *testing.T) {
+	got := explain(&protocol.TooBigError{Need: 9, Have: 4}).text()
+	if got != "入りません（9 バイト必要、キーボードは 4）" {
+		t.Fatalf("fit %q", got)
+	}
+}
+
+func TestMacroEditingIsInTheWindow(t *testing.T) {
+	a := newApp()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{
+		Layers: 1,
+		Macros: 2,
+		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
+	}
+	a.sel = 0
+	tt := ui.NewTester(a.view, 1000, 700)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "マクロ編集"); !ok {
+		t.Fatal("toolbar has no way to edit macros")
+	}
+	if err := tt.Click("マクロ"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("選ぶとキーに割り当てます") {
+		t.Fatal("macro page does not say what choosing a macro does")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "マクロ編集"); !ok {
+		t.Fatal("macro page has no way to edit")
+	}
+}
+
+func TestMoveActionKeepsTheStep(t *testing.T) {
+	steps := []protocol.Action{
+		{Kind: protocol.ActionText, Text: "a"},
+		{Kind: protocol.ActionText, Text: "b"},
+		{Kind: protocol.ActionText, Text: "c"},
+	}
+	got, at := moveAction(steps, 0, 3)
+	if at != 2 || got[0].Text != "b" || got[1].Text != "c" || got[2].Text != "a" {
+		t.Fatalf("moved %#v at %d", got, at)
+	}
+	if steps[0].Text != "a" {
+		t.Fatal("move changed the original")
+	}
+	got, at = moveAction(got, 2, 0)
+	if at != 0 || got[0].Text != "a" || got[2].Text != "c" {
+		t.Fatalf("back %#v at %d", got, at)
 	}
 }

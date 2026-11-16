@@ -19,6 +19,9 @@ const (
 	cmdGetKeycode         = 0x04
 	cmdSetKeycode         = 0x05
 	cmdMacroGetCount      = 0x0C
+	cmdMacroGetBufferSize = 0x0D
+	cmdMacroGetBuffer     = 0x0E
+	cmdMacroSetBuffer     = 0x0F
 	cmdGetLayerCount      = 0x11
 	cmdKeymapGetBuffer    = 0x12
 	cmdVialPrefix         = 0xFE
@@ -34,7 +37,7 @@ const (
 	vialLock          = 0x08
 )
 
-// Chunk is how many keymap bytes one get-buffer report carries.
+// Chunk is how many keymap or macro bytes one buffer report carries.
 const Chunk = 28
 
 // ErrShort is returned when a device response is not a full report.
@@ -144,6 +147,54 @@ func parseMacroCount(resp []byte) (int, error) {
 		n = 128
 	}
 	return n, nil
+}
+
+func getMacroBufferSize() []byte { return []byte{cmdMacroGetBufferSize} }
+
+// parseMacroBufferSize reads the VIA macro-buffer size. A reply that is not
+// that command means the keyboard has no macro memory.
+func parseMacroBufferSize(resp []byte) (int, error) {
+	resp, err := report(resp)
+	if err != nil {
+		return 0, err
+	}
+	if resp[0] != cmdMacroGetBufferSize {
+		return 0, nil
+	}
+	return int(binary.BigEndian.Uint16(resp[1:3])), nil
+}
+
+func macroBufferRequest(offset, n int) ([]byte, error) {
+	if offset < 0 || offset > 0xFFFF || n < 1 || n > Chunk {
+		return nil, fmt.Errorf("macro read offset %d length %d", offset, n)
+	}
+	return []byte{cmdMacroGetBuffer, byte(offset >> 8), byte(offset), byte(n)}, nil
+}
+
+func setMacroBuffer(offset int, chunk []byte) ([]byte, error) {
+	if offset < 0 || offset > 0xFFFF || len(chunk) < 1 || len(chunk) > Chunk {
+		return nil, fmt.Errorf("macro write offset %d length %d", offset, len(chunk))
+	}
+	msg := make([]byte, 4+len(chunk))
+	msg[0] = cmdMacroSetBuffer
+	msg[1] = byte(offset >> 8)
+	msg[2] = byte(offset)
+	msg[3] = byte(len(chunk))
+	copy(msg[4:], chunk)
+	return msg, nil
+}
+
+func macroBufferChunk(resp []byte, n int) ([]byte, error) {
+	resp, err := report(resp)
+	if err != nil {
+		return nil, err
+	}
+	if n < 1 || n > Chunk {
+		return nil, fmt.Errorf("macro chunk %d", n)
+	}
+	out := make([]byte, n)
+	copy(out, resp[4:4+n])
+	return out, nil
 }
 
 func getLayerCount() []byte { return []byte{cmdGetLayerCount} }

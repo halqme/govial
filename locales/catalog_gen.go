@@ -662,18 +662,370 @@ func (msgs Messages) NoteHoldLimitsTap() string {
 	return Catalog.Format(msgs.locale, "noteHoldLimitsTap", nil)
 }
 
-// NoteMacroAssignOnly says "Cannot be edited yet"
+// EditMacros says "Edit macros"
 // in the language the app shows.
 //
-// Shown on the macro page.
-func NoteMacroAssignOnly() string { return In(i18n.Locale()).NoteMacroAssignOnly() }
+// Opens the macro editor from the window toolbar, the macro page, and the
+// Keyboard menu.
+func EditMacros() string { return In(i18n.Locale()).EditMacros() }
 
-// NoteMacroAssignOnly says "Cannot be edited yet"
+// EditMacros says "Edit macros"
 // in the language of msgs.
 //
-// Shown on the macro page.
-func (msgs Messages) NoteMacroAssignOnly() string {
-	return Catalog.Format(msgs.locale, "noteMacroAssignOnly", nil)
+// Opens the macro editor from the window toolbar, the macro page, and the
+// Keyboard menu.
+func (msgs Messages) EditMacros() string {
+	return Catalog.Format(msgs.locale, "editMacros", nil)
+}
+
+// MacroAssignHint says "Choosing one assigns it to the key"
+// in the language the app shows.
+//
+// Shown on the macro page, beside the button that edits what a macro does.
+func MacroAssignHint() string { return In(i18n.Locale()).MacroAssignHint() }
+
+// MacroAssignHint says "Choosing one assigns it to the key"
+// in the language of msgs.
+//
+// Shown on the macro page, beside the button that edits what a macro does.
+func (msgs Messages) MacroAssignHint() string {
+	return Catalog.Format(msgs.locale, "macroAssignHint", nil)
+}
+
+// MacroStepCount says "{count} steps"
+// in the language the app shows.
+//
+// How many steps the macro being edited has, when it has more than one.
+func MacroStepCount(count int) string { return In(i18n.Locale()).MacroStepCount(count) }
+
+// MacroStepCount says "{count} steps"
+// in the language of msgs.
+//
+// How many steps the macro being edited has, when it has more than one.
+func (msgs Messages) MacroStepCount(count int) string {
+	return Catalog.Format(msgs.locale, "macroStepCount", map[string]any{"count": count})
+}
+
+// MacroClose says "Close"
+// in the language the app shows.
+//
+// Leaves the macro editor and returns to the key layout.
+func MacroClose() string { return In(i18n.Locale()).MacroClose() }
+
+// MacroClose says "Close"
+// in the language of msgs.
+//
+// Leaves the macro editor and returns to the key layout.
+func (msgs Messages) MacroClose() string {
+	return Catalog.Format(msgs.locale, "macroClose", nil)
+}
+
+// MacroAdd says "Add"
+// in the language the app shows.
+//
+// The menu of steps that can be added to a macro.
+func MacroAdd() string { return In(i18n.Locale()).MacroAdd() }
+
+// MacroAdd says "Add"
+// in the language of msgs.
+//
+// The menu of steps that can be added to a macro.
+func (msgs Messages) MacroAdd() string {
+	return Catalog.Format(msgs.locale, "macroAdd", nil)
+}
+
+// MacroRemove says "Remove"
+// in the language the app shows.
+//
+// Removes the chosen macro step.
+func MacroRemove() string { return In(i18n.Locale()).MacroRemove() }
+
+// MacroRemove says "Remove"
+// in the language of msgs.
+//
+// Removes the chosen macro step.
+func (msgs Messages) MacroRemove() string {
+	return Catalog.Format(msgs.locale, "macroRemove", nil)
+}
+
+// MacroSave says "Write"
+// in the language the app shows.
+//
+// Writes the macros back to the keyboard.
+func MacroSave() string { return In(i18n.Locale()).MacroSave() }
+
+// MacroSave says "Write"
+// in the language of msgs.
+//
+// Writes the macros back to the keyboard.
+func (msgs Messages) MacroSave() string {
+	return Catalog.Format(msgs.locale, "macroSave", nil)
+}
+
+// MacroEmpty says "This macro does nothing"
+// in the language the app shows.
+//
+// Shown when the chosen macro has no steps.
+func MacroEmpty() string { return In(i18n.Locale()).MacroEmpty() }
+
+// MacroEmpty says "This macro does nothing"
+// in the language of msgs.
+//
+// Shown when the chosen macro has no steps.
+func (msgs Messages) MacroEmpty() string {
+	return Catalog.Format(msgs.locale, "macroEmpty", nil)
+}
+
+// MacroText says "Text"
+// in the language the app shows.
+//
+// Adds characters the macro types.
+func MacroText() string { return In(i18n.Locale()).MacroText() }
+
+// MacroText says "Text"
+// in the language of msgs.
+//
+// Adds characters the macro types.
+func (msgs Messages) MacroText() string {
+	return Catalog.Format(msgs.locale, "macroText", nil)
+}
+
+// MacroTap says "Tap"
+// in the language the app shows.
+//
+// Adds a key the macro taps.
+func MacroTap() string { return In(i18n.Locale()).MacroTap() }
+
+// MacroTap says "Tap"
+// in the language of msgs.
+//
+// Adds a key the macro taps.
+func (msgs Messages) MacroTap() string {
+	return Catalog.Format(msgs.locale, "macroTap", nil)
+}
+
+// MacroDown says "Press"
+// in the language the app shows.
+//
+// Adds a key the macro holds down.
+func MacroDown() string { return In(i18n.Locale()).MacroDown() }
+
+// MacroDown says "Press"
+// in the language of msgs.
+//
+// Adds a key the macro holds down.
+func (msgs Messages) MacroDown() string {
+	return Catalog.Format(msgs.locale, "macroDown", nil)
+}
+
+// MacroUp says "Release"
+// in the language the app shows.
+//
+// Adds a key the macro releases.
+func MacroUp() string { return In(i18n.Locale()).MacroUp() }
+
+// MacroUp says "Release"
+// in the language of msgs.
+//
+// Adds a key the macro releases.
+func (msgs Messages) MacroUp() string {
+	return Catalog.Format(msgs.locale, "macroUp", nil)
+}
+
+// MacroWait says "Wait"
+// in the language the app shows.
+//
+// Adds a wait to a macro.
+func MacroWait() string { return In(i18n.Locale()).MacroWait() }
+
+// MacroWait says "Wait"
+// in the language of msgs.
+//
+// Adds a wait to a macro.
+func (msgs Messages) MacroWait() string {
+	return Catalog.Format(msgs.locale, "macroWait", nil)
+}
+
+// MacroSteps says "Steps"
+// in the language the app shows.
+//
+// The accessible name of the chosen macro's steps.
+func MacroSteps() string { return In(i18n.Locale()).MacroSteps() }
+
+// MacroSteps says "Steps"
+// in the language of msgs.
+//
+// The accessible name of the chosen macro's steps.
+func (msgs Messages) MacroSteps() string {
+	return Catalog.Format(msgs.locale, "macroSteps", nil)
+}
+
+// MacroCharacters says "Characters"
+// in the language the app shows.
+//
+// The field for the characters a macro step types.
+func MacroCharacters() string { return In(i18n.Locale()).MacroCharacters() }
+
+// MacroCharacters says "Characters"
+// in the language of msgs.
+//
+// The field for the characters a macro step types.
+func (msgs Messages) MacroCharacters() string {
+	return Catalog.Format(msgs.locale, "macroCharacters", nil)
+}
+
+// MacroMilliseconds says "Milliseconds"
+// in the language the app shows.
+//
+// The field for how long a macro step waits.
+func MacroMilliseconds() string { return In(i18n.Locale()).MacroMilliseconds() }
+
+// MacroMilliseconds says "Milliseconds"
+// in the language of msgs.
+//
+// The field for how long a macro step waits.
+func (msgs Messages) MacroMilliseconds() string {
+	return Catalog.Format(msgs.locale, "macroMilliseconds", nil)
+}
+
+// MacroKey says "Key"
+// in the language the app shows.
+//
+// The field for the key a macro step presses.
+func MacroKey() string { return In(i18n.Locale()).MacroKey() }
+
+// MacroKey says "Key"
+// in the language of msgs.
+//
+// The field for the key a macro step presses.
+func (msgs Messages) MacroKey() string {
+	return Catalog.Format(msgs.locale, "macroKey", nil)
+}
+
+// MacroBlank says "Empty"
+// in the language the app shows.
+//
+// A macro step that types nothing.
+func MacroBlank() string { return In(i18n.Locale()).MacroBlank() }
+
+// MacroBlank says "Empty"
+// in the language of msgs.
+//
+// A macro step that types nothing.
+func (msgs Messages) MacroBlank() string {
+	return Catalog.Format(msgs.locale, "macroBlank", nil)
+}
+
+// StepPress says "Press {keys}"
+// in the language the app shows.
+//
+// A macro step that holds keys down.
+func StepPress(keys string) string { return In(i18n.Locale()).StepPress(keys) }
+
+// StepPress says "Press {keys}"
+// in the language of msgs.
+//
+// A macro step that holds keys down.
+func (msgs Messages) StepPress(keys string) string {
+	return Catalog.Format(msgs.locale, "stepPress", map[string]any{"keys": keys})
+}
+
+// StepRelease says "Release {keys}"
+// in the language the app shows.
+//
+// A macro step that releases keys.
+func StepRelease(keys string) string { return In(i18n.Locale()).StepRelease(keys) }
+
+// StepRelease says "Release {keys}"
+// in the language of msgs.
+//
+// A macro step that releases keys.
+func (msgs Messages) StepRelease(keys string) string {
+	return Catalog.Format(msgs.locale, "stepRelease", map[string]any{"keys": keys})
+}
+
+// StepWait says "{ms} ms"
+// in the language the app shows.
+//
+// A macro step that waits.
+func StepWait(ms int) string { return In(i18n.Locale()).StepWait(ms) }
+
+// StepWait says "{ms} ms"
+// in the language of msgs.
+//
+// A macro step that waits.
+func (msgs Messages) StepWait(ms int) string {
+	return Catalog.Format(msgs.locale, "stepWait", map[string]any{"ms": ms})
+}
+
+// ErrMacroText says "Only characters the keyboard can send"
+// in the language the app shows.
+//
+// Shown when macro text is empty or is not one byte per character.
+func ErrMacroText() string { return In(i18n.Locale()).ErrMacroText() }
+
+// ErrMacroText says "Only characters the keyboard can send"
+// in the language of msgs.
+//
+// Shown when macro text is empty or is not one byte per character.
+func (msgs Messages) ErrMacroText() string {
+	return Catalog.Format(msgs.locale, "errMacroText", nil)
+}
+
+// ErrMacroDelay says "This wait cannot be used"
+// in the language the app shows.
+//
+// Shown when a wait does not fit the keyboard's macro format.
+func ErrMacroDelay() string { return In(i18n.Locale()).ErrMacroDelay() }
+
+// ErrMacroDelay says "This wait cannot be used"
+// in the language of msgs.
+//
+// Shown when a wait does not fit the keyboard's macro format.
+func (msgs Messages) ErrMacroDelay() string {
+	return Catalog.Format(msgs.locale, "errMacroDelay", nil)
+}
+
+// ErrMacroWide says "This key cannot be used"
+// in the language the app shows.
+//
+// Shown when a key does not fit the keyboard's macro format.
+func ErrMacroWide() string { return In(i18n.Locale()).ErrMacroWide() }
+
+// ErrMacroWide says "This key cannot be used"
+// in the language of msgs.
+//
+// Shown when a key does not fit the keyboard's macro format.
+func (msgs Messages) ErrMacroWide() string {
+	return Catalog.Format(msgs.locale, "errMacroWide", nil)
+}
+
+// ErrMacroFit says "Does not fit ({need} bytes, the keyboard has {have})"
+// in the language the app shows.
+//
+// Shown when the macros are larger than the keyboard's buffer.
+func ErrMacroFit(need int, have int) string { return In(i18n.Locale()).ErrMacroFit(need, have) }
+
+// ErrMacroFit says "Does not fit ({need} bytes, the keyboard has {have})"
+// in the language of msgs.
+//
+// Shown when the macros are larger than the keyboard's buffer.
+func (msgs Messages) ErrMacroFit(need int, have int) string {
+	return Catalog.Format(msgs.locale, "errMacroFit", map[string]any{"need": need, "have": have})
+}
+
+// FlashMacro says "Wrote"
+// in the language the app shows.
+//
+// The notice after the macros are written.
+func FlashMacro() string { return In(i18n.Locale()).FlashMacro() }
+
+// FlashMacro says "Wrote"
+// in the language of msgs.
+//
+// The notice after the macros are written.
+func (msgs Messages) FlashMacro() string {
+	return Catalog.Format(msgs.locale, "flashMacro", nil)
 }
 
 // BasicKeys says "Basic keys"

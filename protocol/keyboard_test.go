@@ -196,6 +196,8 @@ type fakeKeyboard struct {
 	reqs      [][]byte
 	enc       [][2]uint16
 	macros    int
+	macroMem  int
+	macroBuf  []byte
 }
 
 func (f *fakeKeyboard) Exchange(msg []byte) ([]byte, error) {
@@ -225,6 +227,26 @@ func (f *fakeKeyboard) Exchange(msg []byte) ([]byte, error) {
 			resp[0] = cmdMacroGetCount
 			resp[1] = byte(f.macros)
 		}
+	case cmdMacroGetBufferSize:
+		resp[0] = cmdMacroGetBufferSize
+		binary.BigEndian.PutUint16(resp[1:3], uint16(f.macroMem))
+	case cmdMacroGetBuffer:
+		off := int(msg[1])<<8 | int(msg[2])
+		n := int(msg[3])
+		raw := f.macroRaw()
+		if n < 1 || n > Chunk || off < 0 || off+n > len(raw) {
+			return nil, errors.New("macro range")
+		}
+		copy(resp[4:], raw[off:off+n])
+	case cmdMacroSetBuffer:
+		off := int(msg[1])<<8 | int(msg[2])
+		n := int(msg[3])
+		if n < 1 || n > Chunk || off < 0 || off+n > f.macroMem || 4+n > len(msg) {
+			return nil, errors.New("macro range")
+		}
+		raw := f.macroRaw()
+		copy(raw[off:], msg[4:4+n])
+		f.macroBuf = raw
 	case cmdGetKeycode:
 		code, ok := f.codeAt(int(msg[1]), int(msg[2]), int(msg[3]))
 		if !ok {
@@ -327,6 +349,16 @@ func (f *fakeKeyboard) shape() (rows, cols int) {
 		cols = 2
 	}
 	return rows, cols
+}
+
+func (f *fakeKeyboard) macroRaw() []byte {
+	if len(f.macroBuf) >= f.macroMem {
+		return f.macroBuf[:f.macroMem]
+	}
+	grown := make([]byte, f.macroMem)
+	copy(grown, f.macroBuf)
+	f.macroBuf = grown
+	return grown
 }
 
 func (f *fakeKeyboard) codeAt(layer, row, col int) (uint16, bool) {

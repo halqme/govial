@@ -193,9 +193,125 @@
   "@noteHoldLimitsTap": {
     "description": "Shown on the other key pages while the chosen key has a hold."
   },
-  "noteMacroAssignOnly": "Cannot be edited yet",
-  "@noteMacroAssignOnly": {
-    "description": "Shown on the macro page."
+  "editMacros": "Edit macros",
+  "@editMacros": {
+    "description": "Opens the macro editor from the window toolbar, the macro page, and the Keyboard menu."
+  },
+  "macroAssignHint": "Choosing one assigns it to the key",
+  "@macroAssignHint": {
+    "description": "Shown on the macro page, beside the button that edits what a macro does."
+  },
+  "macroStepCount": "{count} steps",
+  "@macroStepCount": {
+    "description": "How many steps the macro being edited has, when it has more than one.",
+    "placeholders": {
+      "count": { "type": "int", "example": "3" }
+    }
+  },
+  "macroClose": "Close",
+  "@macroClose": {
+    "description": "Leaves the macro editor and returns to the key layout."
+  },
+  "macroAdd": "Add",
+  "@macroAdd": {
+    "description": "The menu of steps that can be added to a macro."
+  },
+  "macroRemove": "Remove",
+  "@macroRemove": {
+    "description": "Removes the chosen macro step."
+  },
+  "macroSave": "Write",
+  "@macroSave": {
+    "description": "Writes the macros back to the keyboard."
+  },
+  "macroEmpty": "This macro does nothing",
+  "@macroEmpty": {
+    "description": "Shown when the chosen macro has no steps."
+  },
+  "macroText": "Text",
+  "@macroText": {
+    "description": "Adds characters the macro types."
+  },
+  "macroTap": "Tap",
+  "@macroTap": {
+    "description": "Adds a key the macro taps."
+  },
+  "macroDown": "Press",
+  "@macroDown": {
+    "description": "Adds a key the macro holds down."
+  },
+  "macroUp": "Release",
+  "@macroUp": {
+    "description": "Adds a key the macro releases."
+  },
+  "macroWait": "Wait",
+  "@macroWait": {
+    "description": "Adds a wait to a macro."
+  },
+  "macroSteps": "Steps",
+  "@macroSteps": {
+    "description": "The accessible name of the chosen macro's steps."
+  },
+  "macroCharacters": "Characters",
+  "@macroCharacters": {
+    "description": "The field for the characters a macro step types."
+  },
+  "macroMilliseconds": "Milliseconds",
+  "@macroMilliseconds": {
+    "description": "The field for how long a macro step waits."
+  },
+  "macroKey": "Key",
+  "@macroKey": {
+    "description": "The field for the key a macro step presses."
+  },
+  "macroBlank": "Empty",
+  "@macroBlank": {
+    "description": "A macro step that types nothing."
+  },
+  "stepPress": "Press {keys}",
+  "@stepPress": {
+    "description": "A macro step that holds keys down.",
+    "placeholders": {
+      "keys": { "type": "String", "example": "A" }
+    }
+  },
+  "stepRelease": "Release {keys}",
+  "@stepRelease": {
+    "description": "A macro step that releases keys.",
+    "placeholders": {
+      "keys": { "type": "String", "example": "A" }
+    }
+  },
+  "stepWait": "{ms} ms",
+  "@stepWait": {
+    "description": "A macro step that waits.",
+    "placeholders": {
+      "ms": { "type": "int", "example": "100" }
+    }
+  },
+  "errMacroText": "Only characters the keyboard can send",
+  "@errMacroText": {
+    "description": "Shown when macro text is empty or is not one byte per character."
+  },
+  "errMacroDelay": "This wait cannot be used",
+  "@errMacroDelay": {
+    "description": "Shown when a wait does not fit the keyboard's macro format."
+  },
+  "errMacroWide": "This key cannot be used",
+  "@errMacroWide": {
+    "description": "Shown when a key does not fit the keyboard's macro format."
+  },
+  "errMacroFit": "Does not fit ({need} bytes, the keyboard has {have})",
+  "@errMacroFit": {
+    "description": "Shown when the macros are larger than the keyboard's buffer.",
+    "placeholders": {
+      "need": { "type": "int", "example": "40" },
+      "have": { "type": "int", "example": "16" }
+    }
+  },
+  "flashMacro": "Wrote",
+  "@flashMacro": {
+    "description": "The notice after the macros are written."
   },
   "basicKeys": "Basic keys",
   "@basicKeys": {

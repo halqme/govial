@@ -57,6 +57,17 @@ type app struct {
 	inset         ui.Point
 	pick          int
 	slot          string
+	macrosOn      bool
+	macroSlotID   string
+	macroAct      int
+	macroSplit    float32
+	macros        []protocol.Macro
+	macroMem      int
+	macroList     ui.ListState
+	macroItem     *mygo.MenuItem
+	macroLabel    string
+	macroEnabled  bool
+	macroChecked  bool
 	layout        []int
 	layoutKB      *protocol.Keyboard
 	reloadItem    *mygo.MenuItem
@@ -78,7 +89,7 @@ type app struct {
 }
 
 func newApp() *app {
-	return &app{sel: -1, hot: -1, slot: slotTap}
+	return &app{sel: -1, hot: -1, slot: slotTap, macroAct: -1}
 }
 
 func (a *app) view(c *ui.Context) {
@@ -105,7 +116,11 @@ func (a *app) view(c *ui.Context) {
 		case a.kb == nil:
 			a.empty(c)
 		default:
-			a.workspace(c)
+			if a.macrosOn {
+				a.macroScreen(c)
+			} else {
+				a.workspace(c)
+			}
 		}
 	})
 }
@@ -126,10 +141,17 @@ func (a *app) installMenus() {
 		Disabled:    true,
 		Click:       func(*mygo.MenuItem, *mygo.Window) { a.toggleLock() },
 	}
+	a.macroItem = &mygo.MenuItem{
+		ID:       "macros",
+		Label:    locales.EditMacros(),
+		Type:     mygo.MenuItemCheckbox,
+		Disabled: true,
+		Click:    func(*mygo.MenuItem, *mygo.Window) { a.toggleMacros() },
+	}
 	a.keyboardItem = &mygo.MenuItem{
 		ID:      "keyboard",
 		Label:   locales.Keyboard(),
-		Submenu: []*mygo.MenuItem{a.reloadItem, mygo.Separator(), a.lockItem},
+		Submenu: []*mygo.MenuItem{a.reloadItem, mygo.Separator(), a.lockItem, mygo.Separator(), a.macroItem},
 	}
 	a.systemItem = &mygo.MenuItem{
 		ID:    "lang-system",
@@ -203,6 +225,19 @@ func (a *app) syncMenu() {
 		a.lockOn = lockOn
 		a.lockItem.SetEnabled(lockOn)
 	}
+	if a.macroItem == nil {
+		return
+	}
+	a.setLabel(&a.macroLabel, a.macroItem, locales.EditMacros())
+	macroOn := a.dev != nil && a.kb != nil && a.kb.Macros > 0 && !a.busy && !a.unlocking
+	if macroOn != a.macroEnabled {
+		a.macroEnabled = macroOn
+		a.macroItem.SetEnabled(macroOn)
+	}
+	if a.macrosOn != a.macroChecked {
+		a.macroChecked = a.macrosOn
+		a.macroItem.SetChecked(a.macrosOn)
+	}
 }
 
 func (a *app) setLabel(cached *string, item *mygo.MenuItem, label string) {
@@ -264,17 +299,35 @@ func (a *app) toolbar(c *ui.Context) {
 	ui.Toolbar(c, func() {
 		a.deviceSelect(c)
 		ui.Spacer(c)
-		a.layers(c)
+		if !a.macrosOn {
+			a.layers(c)
+		}
 		ui.Spacer(c)
 		// With no board, searching shows the wait in the middle instead.
 		if a.busy && a.kb != nil {
 			ui.Spinner(c).Label(locales.StatusBusy())
+		}
+		if a.kb != nil && a.kb.Macros > 0 {
+			a.macroButton(c)
 		}
 		if a.dev != nil {
 			a.lockButton(c)
 		}
 		iconButton(c, "reload", "arrow.clockwise", reloadIcon, locales.Reload()).Disabled(a.busy).OnClick(a.refresh)
 	}).Label(locales.ToolbarLabel()).Height(max(bar.Height, t.Rem(3.25))).Padding(0, bar.Right+t.Space(3), 0, bar.Left+t.Space(3)).DragWindow()
+}
+
+// macroButton opens the editor from the window, next to the lock. The
+// menu has the same command; this is the one in sight.
+func (a *app) macroButton(c *ui.Context) {
+	label := locales.EditMacros()
+	var b ui.Element
+	if a.macrosOn {
+		b = ui.PrimaryButton(c.Key("macro-mode"), label)
+	} else {
+		b = ui.Button(c.Key("macro-mode"), label)
+	}
+	b.Disabled(a.busy || a.unlocking || a.dev == nil).OnClick(a.toggleMacros)
 }
 
 func (a *app) lockButton(c *ui.Context) {
@@ -1087,15 +1140,15 @@ func (a *app) picker(c *ui.Context) {
 		groups = palette()
 	}
 	var note string
-	switch _, hold := a.tapHold(); {
-	case hold != 0 && kinds[a.pick] != kindBasic && kinds[a.pick] != kindOther:
+	if _, hold := a.tapHold(); hold != 0 && kinds[a.pick] != kindBasic && kinds[a.pick] != kindOther {
 		note = locales.NoteHoldLimitsTap()
-	case kinds[a.pick] == kindMacro:
-		note = locales.NoteMacroAssignOnly()
 	}
 	var lead func()
 	if kinds[a.pick] == kindBasic {
 		lead = func() { a.basicBoard(c) }
+	}
+	if kinds[a.pick] == kindMacro {
+		a.macroLead(c)
 	}
 	choices(c, note, lead, groups, func(code uint16, short string) { a.tapButton(c, code, short) })
 }
@@ -1481,6 +1534,7 @@ func (a *app) finish(gen int, infos []hid.Info, dev *hid.Device, kb *protocol.Ke
 			a.entry = entry
 			a.layer = 0
 			a.sel = -1
+			a.closeMacros()
 			a.unlocked = lock.Open
 			a.hold = lock.Keys
 			a.unlocking = lock.Pending
@@ -1746,12 +1800,17 @@ const (
 	faultLockedAssign
 	faultHoldBasic
 	faultLockFailed
+	faultMacroText
+	faultMacroDelay
+	faultMacroWide
+	faultMacroFit
 )
 
 // fault is why the banner is showing, so a language change can say it again.
 type fault struct {
-	kind faultKind
-	arg  string
+	kind       faultKind
+	arg        string
+	need, have int
 }
 
 func (f fault) text() string {
@@ -1774,6 +1833,14 @@ func (f fault) text() string {
 		return locales.NoteHoldBasicOnly()
 	case faultLockFailed:
 		return locales.ErrLockFailed()
+	case faultMacroText:
+		return locales.ErrMacroText()
+	case faultMacroDelay:
+		return locales.ErrMacroDelay()
+	case faultMacroWide:
+		return locales.ErrMacroWide()
+	case faultMacroFit:
+		return locales.ErrMacroFit(f.need, f.have)
 	default:
 		return ""
 	}
@@ -1801,6 +1868,10 @@ func (a *app) banner() string {
 func explain(err error) fault {
 	if err == nil {
 		return fault{}
+	}
+	var big *protocol.TooBigError
+	if errors.As(err, &big) {
+		return fault{kind: faultMacroFit, need: big.Need, have: big.Have}
 	}
 	var kept *protocol.Kept
 	if errors.As(err, &kept) {
