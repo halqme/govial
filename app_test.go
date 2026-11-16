@@ -58,7 +58,7 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	if a.layer != 1 {
 		t.Fatalf("layer %d", a.layer)
 	}
-	if !tt.HasText("キーを選ぶと、ここで割り当てを変えられます") {
+	if !tt.HasText("キーを選んでください") {
 		t.Fatalf("no hint with no key chosen: %q", tt.Texts())
 	}
 	board, ok := tt.AccessByRole(ui.RoleGroup, "キー配列")
@@ -85,7 +85,7 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 	if a.sel != -1 {
 		t.Fatalf("escape left %d chosen", a.sel)
 	}
-	if !tt.HasText("キーを選ぶと、ここで割り当てを変えられます") {
+	if !tt.HasText("キーを選んでください") {
 		t.Fatal("hint missing after escape")
 	}
 }
@@ -118,7 +118,7 @@ func TestLockedKeyboardHidesPalette(t *testing.T) {
 	}
 	a.sel = 0
 	tt := ui.NewTester(a.view, 1000, 700)
-	if !tt.HasText("ロック中です。割り当てるには「解除」を押して、表示されたキーを押し続けてください") {
+	if !tt.HasText("ロック中") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "A"); ok {
@@ -157,7 +157,7 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 	if err := tt.Click("マクロ"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("割り当てだけです。マクロの中身はまだ編集できません") {
+	if !tt.HasText("まだ編集できません") {
 		t.Fatal("macro note missing")
 	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "M0"); !ok {
@@ -186,7 +186,7 @@ func TestHoldSlotOffersLayersAndModifiers(t *testing.T) {
 	}
 	a.sel = 0
 	tt := ui.NewTester(a.view, 1000, 700)
-	if _, ok := tt.AccessByRole(ui.RoleButton, "レイヤー 1"); ok {
+	if _, ok := tt.AccessByRole(ui.RoleButton, "L1"); ok {
 		t.Fatal("hold choices show while the tap slot is chosen")
 	}
 	if err := tt.Click("長押し"); err != nil {
@@ -195,12 +195,12 @@ func TestHoldSlotOffersLayersAndModifiers(t *testing.T) {
 	if a.slot != slotHold {
 		t.Fatalf("slot %q", a.slot)
 	}
-	for _, label := range []string{"なし", "レイヤー 0", "レイヤー 15", "⌃", "右⌘", "⌃⇧⌥⌘"} {
+	for _, label := range []string{"なし", "L0", "L15", "⌃", "右⌘", "⌃⇧⌥⌘"} {
 		if _, ok := tt.AccessByRole(ui.RoleButton, label); !ok {
 			t.Fatalf("%s missing: %q", label, tt.Texts())
 		}
 	}
-	if _, ok := tt.AccessByRole(ui.RoleButton, "レイヤー 16"); ok {
+	if _, ok := tt.AccessByRole(ui.RoleButton, "L16"); ok {
 		t.Fatal("LT reaches layer 15, but layer 16 is offered")
 	}
 }
@@ -321,7 +321,7 @@ func TestLoadingDoesNotSayMissing(t *testing.T) {
 	if tt.HasText("Vial のキーボードが見つかりません") {
 		t.Fatal("reading the keyboard says there is none")
 	}
-	if !tt.HasText("キーボードを読み込んでいます") {
+	if !tt.HasText("読み込み中") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 }

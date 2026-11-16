@@ -278,11 +278,11 @@ func (a *app) toolbar(c *ui.Context) {
 }
 
 func (a *app) lockButton(c *ui.Context) {
-	symbol, icon, tip := "lock.fill", lockIcon, locales.TipLocked()
+	symbol, icon := "lock.fill", lockIcon
 	if a.unlocked || a.unlocking {
-		symbol, icon, tip = "lock.open.fill", unlockIcon, locales.TipUnlocked()
+		symbol, icon = "lock.open.fill", unlockIcon
 	}
-	iconButton(c, "lock", symbol, icon, a.lockCommand()).Tooltip(tip).Disabled(a.busy).OnClick(a.toggleLock)
+	iconButton(c, "lock", symbol, icon, a.lockCommand()).Disabled(a.busy).OnClick(a.toggleLock)
 }
 
 // iconButton is a title bar button that shows an SF Symbol, or fallback
@@ -964,7 +964,7 @@ func (a *app) lockNote(c *ui.Context) {
 	if a.unlocked || a.unlocking {
 		return
 	}
-	ui.Text(c, locales.LockNote(locales.LockUnlock())).TextColor(c.Theme().TextMuted)
+	ui.Text(c, locales.LockNote()).TextColor(c.Theme().TextMuted)
 }
 
 func (a *app) current() uint16 {

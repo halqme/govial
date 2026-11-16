@@ -146,36 +146,6 @@ func (msgs Messages) LockUnlocking() string {
 	return Catalog.Format(msgs.locale, "lockUnlocking", nil)
 }
 
-// TipLocked says "Locked. Click to unlock."
-// in the language the app shows.
-//
-// The tooltip of the lock button while the keyboard is locked.
-func TipLocked() string { return In(i18n.Locale()).TipLocked() }
-
-// TipLocked says "Locked. Click to unlock."
-// in the language of msgs.
-//
-// The tooltip of the lock button while the keyboard is locked.
-func (msgs Messages) TipLocked() string {
-	return Catalog.Format(msgs.locale, "tipLocked", nil)
-}
-
-// TipUnlocked says "Unlocked. Click to lock."
-// in the language the app shows.
-//
-// The tooltip of the lock button while the keyboard is unlocked or
-// unlocking.
-func TipUnlocked() string { return In(i18n.Locale()).TipUnlocked() }
-
-// TipUnlocked says "Unlocked. Click to lock."
-// in the language of msgs.
-//
-// The tooltip of the lock button while the keyboard is unlocked or
-// unlocking.
-func (msgs Messages) TipUnlocked() string {
-	return Catalog.Format(msgs.locale, "tipUnlocked", nil)
-}
-
 // StatusBusy says "Communicating"
 // in the language the app shows.
 //
@@ -218,13 +188,13 @@ func (msgs Messages) EmptyTitle() string {
 	return Catalog.Format(msgs.locale, "emptyTitle", nil)
 }
 
-// Loading says "Reading the keyboard"
+// Loading says "Reading"
 // in the language the app shows.
 //
 // Shown while a keyboard is being looked for and read.
 func Loading() string { return In(i18n.Locale()).Loading() }
 
-// Loading says "Reading the keyboard"
+// Loading says "Reading"
 // in the language of msgs.
 //
 // Shown while a keyboard is being looked for and read.
@@ -274,13 +244,13 @@ func (msgs Messages) UnlockProgress() string {
 	return Catalog.Format(msgs.locale, "unlockProgress", nil)
 }
 
-// UnlockRemain says "{count, plural, one {# left. To stop, unplug the keyboard and plug it back in.} other {# left. To stop, unplug the ke…"
+// UnlockRemain says "{count, plural, one {# left. Unplug and plug in to stop.} other {# left. Unplug and plug in to stop.}}"
 // in the language the app shows.
 //
 // How many unlock steps remain, and how to cancel.
 func UnlockRemain(count int) string { return In(i18n.Locale()).UnlockRemain(count) }
 
-// UnlockRemain says "{count, plural, one {# left. To stop, unplug the keyboard and plug it back in.} other {# left. To stop, unplug the ke…"
+// UnlockRemain says "{count, plural, one {# left. Unplug and plug in to stop.} other {# left. Unplug and plug in to stop.}}"
 // in the language of msgs.
 //
 // How many unlock steps remain, and how to cancel.
@@ -358,13 +328,13 @@ func (msgs Messages) PanelLabel() string {
 	return Catalog.Format(msgs.locale, "panelLabel", nil)
 }
 
-// HintChooseKey says "Select a key to change its assignment"
+// HintChooseKey says "Select a key"
 // in the language the app shows.
 //
 // The assignment pane when no key is selected.
 func HintChooseKey() string { return In(i18n.Locale()).HintChooseKey() }
 
-// HintChooseKey says "Select a key to change its assignment"
+// HintChooseKey says "Select a key"
 // in the language of msgs.
 //
 // The assignment pane when no key is selected.
@@ -442,13 +412,13 @@ func (msgs Messages) None() string {
 	return Catalog.Format(msgs.locale, "none", nil)
 }
 
-// LayerN says "Layer {layer}"
+// LayerN says "L{layer}"
 // in the language the app shows.
 //
 // A layer named by its number, as a hold or in the key summary.
 func LayerN(layer int) string { return In(i18n.Locale()).LayerN(layer) }
 
-// LayerN says "Layer {layer}"
+// LayerN says "L{layer}"
 // in the language of msgs.
 //
 // A layer named by its number, as a hold or in the key summary.
@@ -500,14 +470,14 @@ func (msgs Messages) GroupModifiers() string {
 	return Catalog.Format(msgs.locale, "groupModifiers", nil)
 }
 
-// NoteHoldBasicOnly says "A hold can be added only to a basic key without modifiers"
+// NoteHoldBasicOnly says "Only basic keys can be registered"
 // in the language the app shows.
 //
 // Why a hold cannot be combined with the chosen tap, and the error when
 // that write is refused.
 func NoteHoldBasicOnly() string { return In(i18n.Locale()).NoteHoldBasicOnly() }
 
-// NoteHoldBasicOnly says "A hold can be added only to a basic key without modifiers"
+// NoteHoldBasicOnly says "Only basic keys can be registered"
 // in the language of msgs.
 //
 // Why a hold cannot be combined with the chosen tap, and the error when
@@ -580,18 +550,18 @@ func (msgs Messages) KeySummary(layer int, row int, col int, code string) string
 	return Catalog.Format(msgs.locale, "keySummary", map[string]any{"layer": layer, "row": row, "col": col, "code": code})
 }
 
-// LockNote says "The keyboard is locked. Click “{action}” and hold the keys shown to assign one."
+// LockNote says "Locked"
 // in the language the app shows.
 //
-// Why the assignment pane offers no keys, naming the unlock command.
-func LockNote(action string) string { return In(i18n.Locale()).LockNote(action) }
+// Why the assignment pane offers no keys.
+func LockNote() string { return In(i18n.Locale()).LockNote() }
 
-// LockNote says "The keyboard is locked. Click “{action}” and hold the keys shown to assign one."
+// LockNote says "Locked"
 // in the language of msgs.
 //
-// Why the assignment pane offers no keys, naming the unlock command.
-func (msgs Messages) LockNote(action string) string {
-	return Catalog.Format(msgs.locale, "lockNote", map[string]any{"action": action})
+// Why the assignment pane offers no keys.
+func (msgs Messages) LockNote() string {
+	return Catalog.Format(msgs.locale, "lockNote", nil)
 }
 
 // KindBasic says "Basic"
@@ -678,13 +648,13 @@ func (msgs Messages) KeyKind() string {
 	return Catalog.Format(msgs.locale, "keyKind", nil)
 }
 
-// NoteHoldLimitsTap says "While a hold is set, only basic keys can be chosen"
+// NoteHoldLimitsTap says "Only basic keys can be chosen"
 // in the language the app shows.
 //
 // Shown on the other key pages while the chosen key has a hold.
 func NoteHoldLimitsTap() string { return In(i18n.Locale()).NoteHoldLimitsTap() }
 
-// NoteHoldLimitsTap says "While a hold is set, only basic keys can be chosen"
+// NoteHoldLimitsTap says "Only basic keys can be chosen"
 // in the language of msgs.
 //
 // Shown on the other key pages while the chosen key has a hold.
@@ -692,13 +662,13 @@ func (msgs Messages) NoteHoldLimitsTap() string {
 	return Catalog.Format(msgs.locale, "noteHoldLimitsTap", nil)
 }
 
-// NoteMacroAssignOnly says "Assignment only. What a macro does cannot be edited yet."
+// NoteMacroAssignOnly says "Cannot be edited yet"
 // in the language the app shows.
 //
 // Shown on the macro page.
 func NoteMacroAssignOnly() string { return In(i18n.Locale()).NoteMacroAssignOnly() }
 
-// NoteMacroAssignOnly says "Assignment only. What a macro does cannot be edited yet."
+// NoteMacroAssignOnly says "Cannot be edited yet"
 // in the language of msgs.
 //
 // Shown on the macro page.
@@ -902,13 +872,13 @@ func (msgs Messages) ErrLockFailed() string {
 	return Catalog.Format(msgs.locale, "errLockFailed", nil)
 }
 
-// ErrKept says "Could not write. The keyboard still has {name}."
+// ErrKept says "Could not write. Still {name}."
 // in the language the app shows.
 //
 // Shown when a write is refused and the keyboard keeps its key.
 func ErrKept(name string) string { return In(i18n.Locale()).ErrKept(name) }
 
-// ErrKept says "Could not write. The keyboard still has {name}."
+// ErrKept says "Could not write. Still {name}."
 // in the language of msgs.
 //
 // Shown when a write is refused and the keyboard keeps its key.
@@ -972,13 +942,13 @@ func (msgs Messages) ErrWrite() string {
 	return Catalog.Format(msgs.locale, "errWrite", nil)
 }
 
-// ErrLockedAssign says "The keyboard is locked. Unlock it before assigning."
+// ErrLockedAssign says "The keyboard is locked"
 // in the language the app shows.
 //
 // Shown when an assignment is attempted while the keyboard is locked.
 func ErrLockedAssign() string { return In(i18n.Locale()).ErrLockedAssign() }
 
-// ErrLockedAssign says "The keyboard is locked. Unlock it before assigning."
+// ErrLockedAssign says "The keyboard is locked"
 // in the language of msgs.
 //
 // Shown when an assignment is attempted while the keyboard is locked.
