@@ -818,6 +818,20 @@ func (msgs Messages) MacroDown() string {
 	return Catalog.Format(msgs.locale, "macroDown", nil)
 }
 
+// MacroDownNote says "Holds the key down and continues"
+// in the language the app shows.
+//
+// Shown while a press step is chosen. It stays down through later steps.
+func MacroDownNote() string { return In(i18n.Locale()).MacroDownNote() }
+
+// MacroDownNote says "Holds the key down and continues"
+// in the language of msgs.
+//
+// Shown while a press step is chosen. It stays down through later steps.
+func (msgs Messages) MacroDownNote() string {
+	return Catalog.Format(msgs.locale, "macroDownNote", nil)
+}
+
 // MacroUp says "Release"
 // in the language the app shows.
 //
@@ -830,6 +844,20 @@ func MacroUp() string { return In(i18n.Locale()).MacroUp() }
 // Adds a key the macro releases.
 func (msgs Messages) MacroUp() string {
 	return Catalog.Format(msgs.locale, "macroUp", nil)
+}
+
+// MacroUpNote says "Lets the held key up"
+// in the language the app shows.
+//
+// Shown while a release step is chosen.
+func MacroUpNote() string { return In(i18n.Locale()).MacroUpNote() }
+
+// MacroUpNote says "Lets the held key up"
+// in the language of msgs.
+//
+// Shown while a release step is chosen.
+func (msgs Messages) MacroUpNote() string {
+	return Catalog.Format(msgs.locale, "macroUpNote", nil)
 }
 
 // MacroWait says "Wait"

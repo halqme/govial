@@ -8,21 +8,22 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/halqme/govial/view"
 )
 
 func main() {
-	a := newApp()
-	a.installMenus()
+	a := view.New()
+	a.InstallMenus()
 	// Menu labels are set again from the view. The check marks name the
 	// language the app chose, which is only known on the main thread, so
 	// they are set once the app is ready and again when the language changes.
 	mygo.App.OnLocaleChanged(func(string) {
-		a.syncMenu()
-		a.syncLanguage()
+		a.SyncMenu()
+		a.SyncLanguage()
 	})
 	mygo.App.WhenReady(func() {
-		a.syncLanguage()
-		a.win = mygo.NewWindow(mygo.WindowOptions{
+		a.SyncLanguage()
+		a.SetWindow(mygo.NewWindow(mygo.WindowOptions{
 			Title:         "Govial",
 			TitleBarStyle: mygo.TitleBarHiddenInset,
 			Width:         1100,
@@ -32,9 +33,9 @@ func main() {
 			MinWidth:  840,
 			MinHeight: 640,
 			StateKey:  "main",
-			Content:   ui.View(a.view),
-		})
-		a.refresh()
+			Content:   ui.View(a.View),
+		}))
+		a.Refresh()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

@@ -1,4 +1,4 @@
-package main
+package view
 
 import (
 	"errors"
@@ -18,8 +18,8 @@ func init() {
 }
 
 func TestEmptyStateOffersRefresh(t *testing.T) {
-	a := newApp()
-	tt := ui.NewTester(a.view, 900, 640)
+	a := New()
+	tt := ui.NewTester(a.View, 900, 640)
 	if !tt.HasText("Vial のキーボードが見つかりません") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
@@ -32,16 +32,16 @@ func TestEmptyStateOffersRefresh(t *testing.T) {
 }
 
 func TestConnectionErrorStaysOnScreen(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.err = "接続できません"
-	tt := ui.NewTester(a.view, 900, 640)
+	tt := ui.NewTester(a.View, 900, 640)
 	if _, ok := tt.AccessByRole(ui.RoleAlert, "接続できません"); !ok {
 		t.Fatal("error is not an alert")
 	}
 }
 
 func TestLayerSwitchAndArrowSelection(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Name:   "Board",
@@ -51,7 +51,7 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 			{X: 2, Y: 0, W: 1, H: 1, HasMatrix: true, Row: 0, Col: 1},
 		},
 	}
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if err := tt.Click("1"); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestLayerSwitchAndArrowSelection(t *testing.T) {
 }
 
 func TestKnobAssignmentIsNotMatrix(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Layers: 1,
@@ -101,7 +101,7 @@ func TestKnobAssignmentIsNotMatrix(t *testing.T) {
 		},
 	}
 	a.sel = 1
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if tt.HasText("このキーはマトリクスにありません") {
 		t.Fatal("knob is treated as a key with no assignment")
 	}
@@ -111,13 +111,13 @@ func TestKnobAssignmentIsNotMatrix(t *testing.T) {
 }
 
 func TestLockedKeyboardHidesPalette(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.kb = &protocol.Keyboard{
 		Layers: 1,
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if !tt.HasText("ロック中") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
@@ -127,7 +127,7 @@ func TestLockedKeyboardHidesPalette(t *testing.T) {
 }
 
 func TestLayerAndMacroKeysAreOffered(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Layers: 3,
@@ -136,7 +136,7 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleButton, "MO(0)"); ok {
 		t.Fatal("layer keys are mixed into the basic palette")
 	}
@@ -175,14 +175,14 @@ func TestLayerAndMacroKeysAreOffered(t *testing.T) {
 }
 
 func TestHoldSlotOffersLayersAndModifiers(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Layers: 20,
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleButton, "L1"); ok {
 		t.Fatal("hold choices show while the tap slot is chosen")
 	}
@@ -203,7 +203,7 @@ func TestHoldSlotOffersLayersAndModifiers(t *testing.T) {
 }
 
 func TestKnobHasNoHoldSlot(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.slot = slotHold
 	a.kb = &protocol.Keyboard{
@@ -211,7 +211,7 @@ func TestKnobHasNoHoldSlot(t *testing.T) {
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, Encoder: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if tt.HasText("長押し") {
 		t.Fatal("a knob offers a hold")
 	}
@@ -221,11 +221,11 @@ func TestKnobHasNoHoldSlot(t *testing.T) {
 }
 
 func TestLockButtonStartsLock(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.dev = &hid.Device{}
 	a.kb = &protocol.Keyboard{Layers: 1, Keys: []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}}}
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleButton, "ロック"); !ok {
 		t.Fatalf("lock button missing: %q", tt.Texts())
 	}
@@ -238,7 +238,7 @@ func TestLockButtonStartsLock(t *testing.T) {
 }
 
 func TestLockFollowsKeyboardWhenReplyIsMissed(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.finishLock(errors.New("keyboard did not answer"), protocol.Unlock{}, nil)
 	if a.unlocked || a.unlocking || a.err != "" || a.flash != "ロックしました" {
@@ -247,7 +247,7 @@ func TestLockFollowsKeyboardWhenReplyIsMissed(t *testing.T) {
 }
 
 func TestLockStaysOpenWhenKeyboardRefuses(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.finishLock(nil, protocol.Unlock{Open: true}, nil)
 	if !a.unlocked || a.flash != "" || a.err != "ロックできませんでした" {
@@ -256,9 +256,9 @@ func TestLockStaysOpenWhenKeyboardRefuses(t *testing.T) {
 }
 
 func TestLockCommandWithoutKeyboard(t *testing.T) {
-	a := newApp()
-	a.installMenus()
-	a.syncMenu()
+	a := New()
+	a.InstallMenus()
+	a.SyncMenu()
 	if a.lockItem.IsEnabled() {
 		t.Fatal("lock command enabled with no keyboard")
 	}
@@ -271,7 +271,7 @@ func TestLockCommandWithoutKeyboard(t *testing.T) {
 }
 
 func TestDeviceNameWinsOverDefinition(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.kb = &protocol.Keyboard{Name: "HID Keyboard", Layers: 1}
 	a.infos = []hid.Info{{Name: "Cornix", Entry: 7}}
 	a.entry = 7
@@ -285,11 +285,11 @@ func TestDeviceNameWinsOverDefinition(t *testing.T) {
 }
 
 func TestBasicKeysSitOnABoard(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{Layers: 1, Keys: []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}}}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleGroup, "基本のキー"); !ok {
 		t.Fatal("basic keys are not laid out as a board")
 	}
@@ -312,9 +312,9 @@ func TestBasicKeysSitOnABoard(t *testing.T) {
 }
 
 func TestLoadingDoesNotSayMissing(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.busy = true
-	tt := ui.NewTester(a.view, 900, 640)
+	tt := ui.NewTester(a.View, 900, 640)
 	if tt.HasText("Vial のキーボードが見つかりません") {
 		t.Fatal("reading the keyboard says there is none")
 	}
@@ -324,7 +324,7 @@ func TestLoadingDoesNotSayMissing(t *testing.T) {
 }
 
 func TestCustomNamesReadOnOneLine(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Layers: 1,
@@ -332,7 +332,7 @@ func TestCustomNamesReadOnOneLine(t *testing.T) {
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if err := tt.Click("独自"); err != nil {
 		t.Fatal(err)
 	}
@@ -349,8 +349,8 @@ func showLocale(t *testing.T, tag string) {
 
 func TestEnglishShowsTheSourceCatalog(t *testing.T) {
 	showLocale(t, "en")
-	a := newApp()
-	tt := ui.NewTester(a.view, 900, 640)
+	a := New()
+	tt := ui.NewTester(a.View, 900, 640)
 	if !tt.HasText("No Vial keyboard found") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
@@ -363,7 +363,7 @@ func TestEnglishShowsTheSourceCatalog(t *testing.T) {
 }
 
 func TestFailureFollowsTheLanguage(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.finishLock(nil, protocol.Unlock{Open: true}, nil)
 	if a.banner() != "ロックできませんでした" {
@@ -376,8 +376,8 @@ func TestFailureFollowsTheLanguage(t *testing.T) {
 }
 
 func TestLanguageMenuFollowsTheLanguage(t *testing.T) {
-	a := newApp()
-	a.installMenus()
+	a := New()
+	a.InstallMenus()
 	menu := mygo.App.Menu()
 	if menu == nil {
 		t.Fatal("menu missing")
@@ -397,14 +397,14 @@ func TestLanguageMenuFollowsTheLanguage(t *testing.T) {
 		t.Fatalf("en %q ja %q", label("lang-en"), label("lang-ja"))
 	}
 	showLocale(t, "en")
-	a.syncMenu()
+	a.SyncMenu()
 	if label("language") != "Language" || label("lang-system") != "System" || label("keyboard") != "Keyboard" {
 		t.Fatalf("language %q system %q keyboard %q", label("language"), label("lang-system"), label("keyboard"))
 	}
 }
 
 func TestMacroScreenEditsTheChosenSlot(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{Layers: 1, Macros: 2, VialProtocol: 6, Keys: []protocol.Key{{W: 1, H: 1}}}
 	a.macrosOn = true
@@ -414,7 +414,7 @@ func TestMacroScreenEditsTheChosenSlot(t *testing.T) {
 		{{Kind: protocol.ActionText, Text: "Hi"}},
 		{{Kind: protocol.ActionTap, Keys: []uint16{0x04}}},
 	}
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleButton, "書き込む"); !ok {
 		t.Fatal("save missing")
 	}
@@ -451,7 +451,7 @@ func TestMacroScreenEditsTheChosenSlot(t *testing.T) {
 	if len(a.macros[1]) != 1 {
 		t.Fatalf("removed %#v", a.macros[1])
 	}
-	if err := tt.Click("閉じる"); err != nil {
+	if err := tt.Click("マクロ編集"); err != nil {
 		t.Fatal(err)
 	}
 	if a.macrosOn || !tt.HasText("キーを選んでください") {
@@ -460,12 +460,12 @@ func TestMacroScreenEditsTheChosenSlot(t *testing.T) {
 }
 
 func TestLockedMacroScreenDoesNotWrite(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.kb = &protocol.Keyboard{Layers: 1, Macros: 1, VialProtocol: 6}
 	a.macrosOn = true
 	a.macroSlotID = "0"
 	a.macros = []protocol.Macro{{{Kind: protocol.ActionText, Text: "Hi"}}}
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	save, ok := tt.AccessByRole(ui.RoleButton, "書き込む")
 	if !ok || !save.Disabled {
 		t.Fatalf("save %+v", save)
@@ -473,9 +473,6 @@ func TestLockedMacroScreenDoesNotWrite(t *testing.T) {
 	add, ok := tt.AccessByRole(ui.RoleMenuButton, "追加")
 	if !ok || !add.Disabled {
 		t.Fatalf("add %+v", add)
-	}
-	if !tt.HasText("ロック中") {
-		t.Fatal("lock note missing")
 	}
 	a.saveMacros()
 	if a.busy || a.banner() != "ロック中です" {
@@ -490,13 +487,13 @@ func TestLockedMacroScreenDoesNotWrite(t *testing.T) {
 }
 
 func TestOldMacroFormatHasNoWait(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{Macros: 1, VialProtocol: 1}
 	a.macrosOn = true
 	a.macroSlotID = "0"
 	a.macros = []protocol.Macro{nil}
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if err := tt.Click("追加"); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +517,7 @@ func TestMacroFitErrorNamesTheBytes(t *testing.T) {
 }
 
 func TestMacroEditingIsInTheWindow(t *testing.T) {
-	a := newApp()
+	a := New()
 	a.unlocked = true
 	a.kb = &protocol.Keyboard{
 		Layers: 1,
@@ -528,7 +525,7 @@ func TestMacroEditingIsInTheWindow(t *testing.T) {
 		Keys:   []protocol.Key{{X: 0, Y: 0, W: 1, H: 1, HasMatrix: true}},
 	}
 	a.sel = 0
-	tt := ui.NewTester(a.view, 1000, 700)
+	tt := ui.NewTester(a.View, 1000, 700)
 	if _, ok := tt.AccessByRole(ui.RoleButton, "マクロ編集"); !ok {
 		t.Fatal("toolbar has no way to edit macros")
 	}
@@ -540,6 +537,104 @@ func TestMacroEditingIsInTheWindow(t *testing.T) {
 	}
 	if _, ok := tt.AccessByRole(ui.RoleButton, "マクロ編集"); !ok {
 		t.Fatal("macro page has no way to edit")
+	}
+}
+
+func TestMacroStepUsesTheKeyBoard(t *testing.T) {
+	a := New()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Layers: 1, Macros: 1, VialProtocol: 6, Keys: []protocol.Key{{W: 1, H: 1}}}
+	a.macrosOn = true
+	a.macroSlotID = "0"
+	a.macroAct = 0
+	a.macros = []protocol.Macro{{{Kind: protocol.ActionTap, Keys: []uint16{0x04}}}}
+	tt := ui.NewTester(a.View, 1200, 900)
+	if _, ok := tt.AccessByRole(ui.RoleGroup, "基本のキー"); !ok {
+		t.Fatal("a key step is not edited on the board")
+	}
+	if err := tt.Click("B"); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.macros[0][0].Keys; len(got) != 1 || got[0] != 0x05 {
+		t.Fatalf("key %#v", got)
+	}
+}
+
+func TestPressAndReleaseSayWhatTheyDo(t *testing.T) {
+	a := New()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Layers: 1, Macros: 1, VialProtocol: 6, Keys: []protocol.Key{{W: 1, H: 1}}}
+	a.macrosOn = true
+	a.macroSlotID = "0"
+	a.macroAct = 0
+	a.macros = []protocol.Macro{{
+		{Kind: protocol.ActionDown, Keys: []uint16{0x04}},
+		{Kind: protocol.ActionUp, Keys: []uint16{0x04}},
+	}}
+	tt := ui.NewTester(a.View, 1200, 900)
+	if !tt.HasText("押す") || !tt.HasText("離す") {
+		t.Fatalf("kinds missing: %q", tt.Texts())
+	}
+	if !tt.HasText("キーを押したまま、次の手順へ進みます") {
+		t.Fatal("press does not say it stays down")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleButton, "離す A"); !ok {
+		t.Fatal("release step is only the key name")
+	}
+	if err := tt.Click("離す A"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("押しているキーを離します") {
+		t.Fatal("release does not say it lets the key up")
+	}
+}
+
+func TestSwitchingMacrosKeepsThePlace(t *testing.T) {
+	a := New()
+	a.unlocked = true
+	a.kb = &protocol.Keyboard{Layers: 1, Macros: 3, VialProtocol: 6, Keys: []protocol.Key{{W: 1, H: 1}}}
+	a.macrosOn = true
+	a.macroSlotID = "1"
+	a.macros = []protocol.Macro{
+		{{Kind: protocol.ActionDown, Keys: []uint16{0x04}}},
+		nil,
+		nil,
+	}
+	tt := ui.NewTester(a.View, 1200, 900)
+	add, ok := tt.AccessByRole(ui.RoleMenuButton, "追加")
+	if !ok {
+		t.Fatal("add missing on an empty macro")
+	}
+	addY := add.Bounds.Y
+	row, ok := tt.AccessByRole(ui.RoleTreeItem, "M2")
+	if !ok {
+		t.Fatal("slot missing")
+	}
+	rowY := row.Bounds.Y
+	note, ok := tt.AccessByRole(ui.RoleText, "このマクロは何もしません")
+	if !ok {
+		t.Fatal("empty macro has no note")
+	}
+	if tt.HasText("空") {
+		t.Fatal("empty slots are labeled in the list")
+	}
+	if err := tt.Click("M0"); err != nil {
+		t.Fatal(err)
+	}
+	add, ok = tt.AccessByRole(ui.RoleMenuButton, "追加")
+	if !ok || add.Bounds.Y != addY {
+		t.Fatalf("add moved from %v to %+v", addY, add.Bounds)
+	}
+	row, ok = tt.AccessByRole(ui.RoleTreeItem, "M2")
+	if !ok || row.Bounds.Y != rowY {
+		t.Fatalf("list moved from %v to %+v", rowY, row.Bounds)
+	}
+	step, ok := tt.AccessByRole(ui.RoleText, "押す")
+	if !ok {
+		t.Fatal("step kind missing")
+	}
+	if step.Bounds.Y != note.Bounds.Y {
+		t.Fatalf("steps start at %v, empty note at %v", step.Bounds.Y, note.Bounds.Y)
 	}
 }
 

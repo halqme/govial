@@ -240,9 +240,17 @@
   "@macroDown": {
     "description": "Adds a key the macro holds down."
   },
+  "macroDownNote": "Holds the key down and continues",
+  "@macroDownNote": {
+    "description": "Shown while a press step is chosen. It stays down through later steps."
+  },
   "macroUp": "Release",
   "@macroUp": {
     "description": "Adds a key the macro releases."
+  },
+  "macroUpNote": "Lets the held key up",
+  "@macroUpNote": {
+    "description": "Shown while a release step is chosen."
   },
   "macroWait": "Wait",
   "@macroWait": {

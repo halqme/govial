@@ -1,25 +1,22 @@
-package main
+package view
 
 import (
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
-	"github.com/egoist/mygo/plugins/sfsymbols"
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 	"github.com/halqme/govial/locales"
 	"github.com/halqme/govial/protocol"
 )
 
-// The macro screen is a Split: a Sidebar of the slots, each with a Badge of
-// how many steps it has, and a List of the chosen slot's steps, which Reorder
-// rearranges while the keyboard is unlocked. Adding a step is a MenuButton in
-// a Toolbar; the chosen step is a Form on a surface. MyGo v0.9.0 has each of
-// these. Leaving the screen is a button, not BackButton, because the window
-// has no page history.
+// The macro screen is the key panel: the same glass, the same left column,
+// and the same insets. A macro's steps are keycaps in a choice row. A key
+// step is changed on the basic board, not in a menu of names. An empty macro
+// uses that same place, so choosing another slot does not move the screen.
 
-var stepsIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>`))
-
-func (a *app) toggleMacros() {
+func (a *App) toggleMacros() {
 	if a.macrosOn {
 		a.closeMacros()
 		return
@@ -27,7 +24,7 @@ func (a *app) toggleMacros() {
 	a.openMacros()
 }
 
-func (a *app) closeMacros() {
+func (a *App) closeMacros() {
 	a.macrosOn = false
 	a.macros = nil
 	a.macroMem = 0
@@ -36,7 +33,7 @@ func (a *app) closeMacros() {
 	a.macroList = ui.ListState{}
 }
 
-func (a *app) openMacros() {
+func (a *App) openMacros() {
 	if a.busy || a.dev == nil || a.kb == nil || a.kb.Macros == 0 || a.unlocking {
 		return
 	}
@@ -81,7 +78,7 @@ func (a *app) openMacros() {
 
 // macroLead sits on the macro page, above the keys that assign a macro, and
 // opens the editor. The toolbar has the same command.
-func (a *app) macroLead(c *ui.Context) {
+func (a *App) macroLead(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Margin(t.Space(3), t.Space(4), 0, t.Space(4)).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, locales.MacroAssignHint()).TextColor(t.TextMuted)
@@ -89,64 +86,50 @@ func (a *app) macroLead(c *ui.Context) {
 	})
 }
 
-func (a *app) macroScreen(c *ui.Context) {
+func (a *App) macroScreen(c *ui.Context) {
 	t := c.Theme()
-	if a.macroSplit == 0 {
-		a.macroSplit = t.Rem(14)
-	}
 	if a.macroSlotID == "" {
 		a.macroSlotID = "0"
 	}
 	before := a.macroSlotID
-	ui.Column(c).Grow(1).Children(func() {
-		a.macroHeader(c)
-		ui.Split(c, &a.macroSplit, func() {
+	// The key panel's pane, filling the window instead of the band under the board.
+	ui.Row(c).Grow(1).Margin(0, t.Space(4), t.Space(4), t.Space(4)).Radius(t.Rem(1.25)).Material(glass.Glass{Clarity: 0.3}).Border(1, t.Border).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label(locales.EditMacros()).Children(func() {
+		ui.Column(c).Width(t.Rem(13)).Padding(t.Space(4)).Children(func() {
 			ui.Sidebar(c, &a.macroSlotID, func() {
 				for i := range a.macros {
-					code, _ := protocol.MacroKey(i)
-					ui.SidebarItem(c, strconv.Itoa(i), nil, protocol.KeyName(code)).Children(func() {
-						ui.Badge(c, a.slotBadge(i))
-					})
+					n := i
+					code, _ := protocol.MacroKey(n)
+					item := ui.SidebarItem(c, strconv.Itoa(n), nil, protocol.KeyName(code))
+					if len(a.macros[n]) == 0 && a.macroSlotID != strconv.Itoa(n) {
+						item.TextColor(t.TextMuted)
+					}
 				}
-			}).Label(locales.KindMacro()).Fill()
-		}, func() {
-			// The sidebar is built first, so a new slot is known before its steps.
+			}).Label(locales.KindMacro()).Grow(1).Background(ui.RGBA(0, 0, 0, 0))
+		})
+		ui.Column(c).Grow(1).Children(func() {
+			// The slots are built first, so a new one is known before its steps.
 			if a.macroSlotID != before {
 				a.macroAct = -1
 				a.macroList = ui.ListState{}
 			}
-			a.macroEditor(c)
-		}).Grow(1).SplitReset(t.Rem(14))
+			a.macroBody(c)
+		})
 	})
 }
 
-func (a *app) macroHeader(c *ui.Context) {
-	t := c.Theme()
-	name := "M0"
-	if n, err := strconv.Atoi(a.macroSlotID); err == nil {
-		if code, ok := protocol.MacroKey(n); ok {
-			name = protocol.KeyName(code)
-		}
+func (a *App) macroTitle() string {
+	n, err := strconv.Atoi(a.macroSlotID)
+	if err != nil {
+		return "M0"
 	}
-	ui.Row(c).Padding(t.Space(3), t.Space(4), t.Space(2), t.Space(4)).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
-		ui.Button(c.Key("macro-close"), locales.MacroClose()).OnClick(a.closeMacros)
-		ui.Text(c, name).FontSize(t.Rem(1.6)).Bold()
-		if preview := a.slotPreview(); preview != "" {
-			ui.Text(c, preview).FontSize(t.Rem(0.85)).TextColor(t.TextMuted).SingleLine()
-		}
-		ui.Spacer(c)
-		ui.PrimaryButton(c.Key("macro-save"), locales.MacroSave()).Disabled(!a.canEditMacros() || a.dev == nil).OnClick(a.saveMacros)
-	})
+	code, ok := protocol.MacroKey(n)
+	if !ok {
+		return "M0"
+	}
+	return protocol.KeyName(code)
 }
 
-func (a *app) slotBadge(i int) string {
-	if i < 0 || i >= len(a.macros) || len(a.macros[i]) == 0 {
-		return locales.MacroBlank()
-	}
-	return strconv.Itoa(len(a.macros[i]))
-}
-
-func (a *app) slotPreview() string {
+func (a *App) slotPreview() string {
 	steps := a.steps()
 	if steps == nil || len(*steps) == 0 {
 		return ""
@@ -157,56 +140,169 @@ func (a *app) slotPreview() string {
 	return locales.MacroStepCount(len(*steps))
 }
 
-func (a *app) macroEditor(c *ui.Context) {
+// macroBody is the panel's right column. The name and the step count sit with
+// the buttons, and the steps start below them. The list is only the left column.
+func (a *App) macroBody(c *ui.Context) {
 	t := c.Theme()
 	edit := a.canEditMacros()
-	ui.Column(c).Fill().Padding(t.Space(2), t.Space(4), t.Space(4), t.Space(2)).Gap(t.Space(3)).Children(func() {
-		if !a.unlocked {
-			ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
-				a.lockNote(c)
-				ui.PrimaryButton(c.Key("macro-unlock"), locales.LockUnlock()).Disabled(a.busy || a.dev == nil).OnClick(a.toggleLock)
+	ui.Column(c).Grow(1).Padding(t.Space(4)).Gap(t.Space(3)).Children(func() {
+		ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, a.macroTitle()).FontSize(t.Rem(1.6)).Bold()
+				// The second line stays when the macro is empty, so this row does not jump.
+				preview := a.slotPreview()
+				if preview == "" {
+					preview = "\u00a0"
+				}
+				ui.Text(c, preview).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
 			})
-		}
-		steps := a.steps()
-		if steps == nil || len(*steps) == 0 {
-			a.macroEmpty(c, edit)
-			return
-		}
-		ui.Toolbar(c, func() {
+			ui.Spacer(c)
 			a.addMenu(c, edit)
 			ui.Button(c.Key("macro-remove"), locales.MacroRemove()).Disabled(!edit || !a.stepChosen()).OnClick(a.removeStep)
-		}).Label(locales.MacroSteps())
-		a.macroList.Selected = &a.macroAct
-		a.macroList.Label = a.stepLabel
-		if edit {
-			a.macroList.Reorder = a.reorderSteps
-		} else {
-			a.macroList.Reorder = nil
-		}
-		ui.List(c, &a.macroList, len(*steps), func(i int) {
-			act := (*steps)[i]
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				ui.Badge(c, stepKind(act.Kind))
-				ui.Text(c, stepValue(a.kb, act)).SingleLine()
-			})
-		}).Grow(1).Label(locales.MacroSteps())
-		if a.stepChosen() {
-			a.stepForm(c, &(*steps)[a.macroAct], edit)
+			ui.PrimaryButton(c.Key("macro-save"), locales.MacroSave()).Disabled(!edit || a.dev == nil).OnClick(a.saveMacros)
+		})
+		steps := a.steps()
+		ui.Scroll(c).Grow(1).Gap(t.Space(2)).Children(func() {
+			if steps == nil || len(*steps) == 0 {
+				ui.Text(c, locales.MacroEmpty()).TextColor(t.TextMuted)
+				return
+			}
+			a.stepSequence(c, *steps, edit)
+			if a.stepChosen() {
+				a.stepEditor(c, &(*steps)[a.macroAct], edit)
+			}
+		})
+	})
+}
+
+// stepSequence is the macro as a row of keycaps, headed like a group of choices.
+func (a *App) stepSequence(c *ui.Context, steps protocol.Macro, edit bool) {
+	ui.Row(c).Wrap().Gap(pickSpacing(c)).Children(func() {
+		for i := range steps {
+			a.stepCap(c, i, edit)
 		}
 	})
 }
 
-func (a *app) macroEmpty(c *ui.Context, edit bool) {
+func (a *App) stepCap(c *ui.Context, i int, edit bool) {
 	t := c.Theme()
-	ui.Column(c).Grow(1).Center().Gap(t.Space(2)).Children(func() {
-		icon := sfsymbols.Symbol(c, "list.bullet").Size(t.Rem(2.4)).Color(t.TextMuted).Fallback(stepsIcon)
-		icon.Role(ui.RoleNone)
-		ui.Text(c, locales.MacroEmpty()).TextColor(t.TextMuted)
-		a.addMenu(c, edit)
+	act := (*a.steps())[i]
+	ui.Column(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, stepKind(act.Kind)).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+		face := stepValue(a.kb, act)
+		tip := a.stepLabel(i)
+		short := ""
+		if tip != face {
+			short = face
+		}
+		a.choiceButton(c, fmt.Sprintf("step-%d", i), tip, short, i == a.macroAct, !edit, func() {
+			a.macroAct = i
+		})
 	})
 }
 
-func (a *app) addMenu(c *ui.Context, edit bool) {
+func (a *App) stepEditor(c *ui.Context, act *protocol.Action, edit bool) {
+	t := c.Theme()
+	switch act.Kind {
+	case protocol.ActionText:
+		ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Width(t.Rem(5.5)).Height(pickUnit(c)).Shrink(0).Justify(ui.Center).Children(func() {
+				ui.Text(c, locales.MacroCharacters()).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+			})
+			text := act.Text
+			if ui.TextInput(c, &text).Label(locales.MacroCharacters()).Grow(1).Disabled(!edit).Changed() {
+				act.Text = text
+			}
+		})
+	case protocol.ActionDelay:
+		ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Width(t.Rem(5.5)).Height(pickUnit(c)).Shrink(0).Justify(ui.Center).Children(func() {
+				ui.Text(c, locales.MacroMilliseconds()).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+			})
+			ms := float64(act.Delay)
+			if ui.NumberInput(c, &ms, 0, float64(protocol.MaxMacroDelay), 1).Label(locales.MacroMilliseconds()).Disabled(!edit).Changed() {
+				act.Delay = int(ms)
+			}
+		})
+	default:
+		if len(act.Keys) == 0 {
+			return
+		}
+		ui.Column(c).Gap(t.Space(2)).Children(func() {
+			if note := holdNote(act.Kind); note != "" {
+				ui.Text(c, note).FontSize(t.Rem(0.85)).TextColor(t.TextMuted)
+			}
+			a.macroKeyBoard(c, act.Keys[0])
+			a.stepKeyGroups(c, act.Keys[0])
+		})
+	}
+}
+
+// macroKeyBoard is the basic board, choosing the selected step's key instead
+// of assigning the key on the layout.
+func (a *App) macroKeyBoard(c *ui.Context, chosen uint16) {
+	unit := pickUnit(c)
+	spacing := pickSpacing(c)
+	ui.Column(c).Gap(spacing).Role(ui.RoleGroup).Label(locales.BasicKeys()).Children(func() {
+		for _, row := range basicRows {
+			ui.Row(c).Gap(spacing).Children(func() {
+				for _, key := range row {
+					width := float32(key.w)*unit - spacing
+					if key.code == room {
+						ui.Box(c).Width(width).Shrink(0)
+						continue
+					}
+					b := a.stepKeyCap(c, key.code, chosen, "").Width(width).MinWidth(width).Height(unit).Padding(0)
+					switch n := utf8.RuneCountInString(buttonName(a.kb, key.code)); {
+					case n > 3:
+						b.FontSize(unit * 0.3)
+					case n > 1:
+						b.FontSize(unit * 0.34)
+					default:
+						b.FontSize(unit * 0.42)
+					}
+				}
+			})
+		}
+	})
+}
+
+func (a *App) stepKeyGroups(c *ui.Context, chosen uint16) {
+	t := c.Theme()
+	groups := palette()
+	if a.kb != nil && len(a.kb.Custom) > 0 {
+		groups = append(groups, customPalette(a.kb)...)
+	}
+	for _, group := range groups {
+		ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Start).Children(func() {
+			ui.Column(c).Width(t.Rem(5.5)).Height(pickUnit(c)).Shrink(0).Justify(ui.Center).Children(func() {
+				ui.Text(c, group.name).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
+			})
+			ui.Row(c).Grow(1).Wrap().Gap(t.Space(1)).Children(func() {
+				for _, code := range group.codes {
+					a.stepKeyCap(c, code, chosen, "")
+				}
+			})
+		})
+	}
+}
+
+func (a *App) stepKeyCap(c *ui.Context, code, chosen uint16, short string) ui.Element {
+	off := a.kb != nil && a.kb.VialProtocol < 2 && code > 0xFF
+	return a.choiceButton(c, fmt.Sprintf("mk-%04x", code), buttonName(a.kb, code), short, code == chosen, off, func() {
+		a.setStepKey(code)
+	})
+}
+
+func (a *App) setStepKey(code uint16) {
+	if !a.canEditMacros() || !a.stepChosen() {
+		return
+	}
+	steps := a.steps()
+	(*steps)[a.macroAct].Keys = []uint16{code}
+}
+
+func (a *App) addMenu(c *ui.Context, edit bool) {
 	ui.MenuButton(c, locales.MacroAdd(), func(m *ui.Menu) {
 		if m.Item(locales.MacroText()).Chosen() {
 			a.addStep(protocol.ActionText)
@@ -226,57 +322,11 @@ func (a *app) addMenu(c *ui.Context, edit bool) {
 	}).Disabled(!edit)
 }
 
-func (a *app) stepForm(c *ui.Context, act *protocol.Action, edit bool) {
-	t := c.Theme()
-	ui.Column(c).Padding(t.Space(3)).Gap(t.Space(2)).Background(t.Surface).Radius(t.Radius).Border(1, t.Border).Children(func() {
-		ui.Text(c, stepKind(act.Kind)).FontSize(t.Rem(0.8)).TextColor(t.TextMuted)
-		switch act.Kind {
-		case protocol.ActionTap, protocol.ActionDown, protocol.ActionUp:
-			if len(act.Keys) > 0 {
-				ui.Text(c, buttonName(a.kb, act.Keys[0])).FontSize(t.Rem(1.6)).Bold()
-			}
-		case protocol.ActionDelay:
-			ui.Text(c, locales.StepWait(act.Delay)).FontSize(t.Rem(1.6)).Bold()
-		}
-		ui.Form(c, func() {
-			switch act.Kind {
-			case protocol.ActionText:
-				ui.Field(c, locales.MacroCharacters(), func() {
-					text := act.Text
-					if ui.TextArea(c, &text).MinHeight(t.Rem(4)).Disabled(!edit).Changed() {
-						act.Text = text
-					}
-				})
-			case protocol.ActionDelay:
-				ui.Field(c, locales.MacroMilliseconds(), func() {
-					ms := float64(act.Delay)
-					if ui.NumberInput(c, &ms, 0, float64(protocol.MaxMacroDelay), 1).Disabled(!edit).Changed() {
-						act.Delay = int(ms)
-					}
-				})
-			default:
-				if len(act.Keys) == 0 {
-					return
-				}
-				ui.Field(c, locales.MacroKey(), func() {
-					names, codes := keyOptions(a.kb, act.Keys[0])
-					choice := buttonName(a.kb, act.Keys[0])
-					if ui.Combobox(c, &choice, names).Disabled(!edit).Changed() {
-						if code, ok := codes[choice]; ok {
-							act.Keys = []uint16{code}
-						}
-					}
-				})
-			}
-		})
-	})
-}
-
-func (a *app) canEditMacros() bool {
+func (a *App) canEditMacros() bool {
 	return a.macrosOn && a.unlocked && !a.busy && !a.unlocking
 }
 
-func (a *app) steps() *protocol.Macro {
+func (a *App) steps() *protocol.Macro {
 	n, err := strconv.Atoi(a.macroSlotID)
 	if err != nil || n < 0 || n >= len(a.macros) {
 		return nil
@@ -284,12 +334,12 @@ func (a *app) steps() *protocol.Macro {
 	return &a.macros[n]
 }
 
-func (a *app) stepChosen() bool {
+func (a *App) stepChosen() bool {
 	steps := a.steps()
 	return steps != nil && a.macroAct >= 0 && a.macroAct < len(*steps)
 }
 
-func (a *app) stepLabel(i int) string {
+func (a *App) stepLabel(i int) string {
 	steps := a.steps()
 	if steps == nil || i < 0 || i >= len(*steps) {
 		return ""
@@ -333,6 +383,17 @@ func joinNames(names []string) string {
 	return out
 }
 
+func holdNote(kind protocol.ActionKind) string {
+	switch kind {
+	case protocol.ActionDown:
+		return locales.MacroDownNote()
+	case protocol.ActionUp:
+		return locales.MacroUpNote()
+	default:
+		return ""
+	}
+}
+
 func stepKind(kind protocol.ActionKind) string {
 	switch kind {
 	case protocol.ActionTap:
@@ -362,7 +423,7 @@ func stepValue(kb *protocol.Keyboard, act protocol.Action) string {
 	}
 }
 
-func (a *app) addStep(kind protocol.ActionKind) {
+func (a *App) addStep(kind protocol.ActionKind) {
 	if !a.canEditMacros() {
 		return
 	}
@@ -383,7 +444,7 @@ func (a *app) addStep(kind protocol.ActionKind) {
 	a.macroAct = len(*steps) - 1
 }
 
-func (a *app) removeStep() {
+func (a *App) removeStep() {
 	if !a.canEditMacros() || !a.stepChosen() {
 		return
 	}
@@ -395,7 +456,7 @@ func (a *app) removeStep() {
 	}
 }
 
-func (a *app) reorderSteps(rows []int, to int) {
+func (a *App) reorderSteps(rows []int, to int) {
 	if !a.canEditMacros() || len(rows) != 1 {
 		return
 	}
@@ -424,7 +485,7 @@ func moveAction(actions []protocol.Action, from, to int) ([]protocol.Action, int
 	return out, to
 }
 
-func (a *app) saveMacros() {
+func (a *App) saveMacros() {
 	if a.busy || !a.macrosOn || a.kb == nil {
 		return
 	}
